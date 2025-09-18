@@ -77,6 +77,7 @@ Route::group(['prefix' => 'v1/user'], function () {
 
         Route::get('/wallet/transactions', [WalletController::class, 'getTransactions']);
 
+        // not use
         Route::get('/complaints', [ComplaintController::class, 'index']);
         Route::post('/complaints', [ComplaintController::class, 'store']);
         Route::get('/complaints/{id}', [ComplaintController::class, 'show']);
@@ -92,7 +93,7 @@ Route::group(['prefix' => 'v1/user'], function () {
         Route::post('/orders', [OrderController::class, 'store']);
         Route::get('/orders/{id}', [OrderController::class, 'show']);
         Route::post('/orders/{id}/cancel', [OrderController::class, 'cancelOrder']);
-        Route::post('orders/{id}/delivered', [OrderController::class, 'markAsDelivered']);
+        Route::post('/orders/{id}/delivered', [OrderController::class, 'markAsDelivered']);
 
         Route::get('/coupons', [CouponController::class, 'index']);
         Route::post('/coupons/validate', [CouponController::class, 'validateCoupon']);

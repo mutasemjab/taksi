@@ -225,6 +225,7 @@ class AuthController extends Controller
                 'driving_license_back' => 'nullable|image|mimes:jpeg,png,jpg',
                 'car_license_front' => 'nullable|image|mimes:jpeg,png,jpg',
                 'car_license_back' => 'nullable|image|mimes:jpeg,png,jpg',
+                'no_criminal_record' => 'nullable|image|mimes:jpeg,png,jpg',
             ]);
         } else {
             $validator = Validator::make($request->all(), [
@@ -289,6 +290,10 @@ class AuthController extends Controller
             
             if ($request->hasFile('car_license_back')) {
                 $userData['car_license_back'] = uploadImage('assets/admin/uploads', $request->file('car_license_back'));
+            }
+            
+            if ($request->hasFile('no_criminal_record')) {
+                $userData['no_criminal_record'] = uploadImage('assets/admin/uploads', $request->file('no_criminal_record'));
             }
             
             // Create driver
@@ -414,6 +419,7 @@ class AuthController extends Controller
                 'production_year' => 'nullable|string|max:4',
                 'color' => 'nullable|string|max:255',
                 'plate_number' => 'nullable|string|max:255',
+                'no_criminal_record' => 'nullable|image',
                 'driving_license_front' => 'nullable|image',
                 'driving_license_back' => 'nullable|image',
                 'car_license_front' => 'nullable|image',
@@ -439,7 +445,8 @@ class AuthController extends Controller
                 'driving_license_front' => 'assets/admin/uploads',
                 'driving_license_back' => 'assets/admin/uploads',
                 'car_license_front' => 'assets/admin/uploads',
-                'car_license_back' => 'assets/admin/uploads'
+                'car_license_back' => 'assets/admin/uploads',
+                'no_criminal_record' => 'assets/admin/uploads',
             ];
 
             foreach ($photoFields as $field => $path) {

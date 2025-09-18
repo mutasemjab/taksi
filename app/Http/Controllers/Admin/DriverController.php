@@ -68,6 +68,7 @@ class DriverController extends Controller
             'driving_license_back' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
             'car_license_front' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
             'car_license_back' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+            'no_criminal_record' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
         if ($validator->fails()) {
@@ -79,7 +80,7 @@ class DriverController extends Controller
 
         $driverData = $request->except([
             'photo', 'photo_of_car', 'driving_license_front', 
-            'driving_license_back', 'car_license_front', 'car_license_back',
+            'driving_license_back', 'car_license_front', 'car_license_back','no_criminal_record',
             'password'
         ]);
 
@@ -171,6 +172,7 @@ class DriverController extends Controller
         'driving_license_back' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         'car_license_front' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         'car_license_back' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+        'no_criminal_record' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
         if ($validator->fails()) {
@@ -182,7 +184,7 @@ class DriverController extends Controller
 
         $driverData = $request->except([
             'photo', 'photo_of_car', 'driving_license_front', 
-            'driving_license_back', 'car_license_front', 'car_license_back',
+            'driving_license_back', 'car_license_front', 'car_license_back','no_criminal_record',
             'password', 'option_ids'
         ]);
 

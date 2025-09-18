@@ -38,6 +38,7 @@ return new class extends Migration
             $table->string('driving_license_back')->nullable();
             $table->string('car_license_front')->nullable();
             $table->string('car_license_back')->nullable();
+            $table->string('no_criminal_record')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });
