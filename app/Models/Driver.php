@@ -26,7 +26,8 @@ class Driver extends Authenticatable
         'driving_license_front_url',
         'driving_license_back_url',
         'car_license_front_url',
-        'car_license_back_url'
+        'car_license_back_url',
+        'no_criminal_record_url',
     ];
     
     /**
@@ -79,6 +80,10 @@ class Driver extends Authenticatable
     public function getCarLicenseBackUrlAttribute()
     {
         return $this->getImageUrl($this->car_license_back);
+    }
+    public function getNoCriminalRecordUrlAttribute()
+    {
+        return $this->getImageUrl($this->no_criminal_record);
     }
     
    public function options()

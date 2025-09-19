@@ -33,8 +33,7 @@ class AuthController extends Controller
         // Toggle status
         $driver->status = $driver->status == 1 ? 2 : 1;
         $driver->save();
-         return $this->success_response('Status updated successfully.', $driver->status);
-     
+        return $this->success_response('Status updated successfully.', $driver->status);
     }
 
     public function getStatusOfDriver()
@@ -42,11 +41,11 @@ class AuthController extends Controller
         $driver = auth('driver-api')->user()->activate;
 
         return response()->json([
-        'message' => 'Driver is active',
-        'status' => 1
-         ]);
+            'message' => 'Driver is active',
+            'status' => 1
+        ]);
     }
-  
+
     public function active()
     {
         $user = auth()->user();
@@ -57,7 +56,7 @@ class AuthController extends Controller
         return $this->success_response('User retrieved successfully', $user);
     }
 
-     public function deleteAccount(Request $request)
+    public function deleteAccount(Request $request)
     {
         try {
             // Define disallowed statuses
@@ -69,43 +68,41 @@ class AuthController extends Controller
                 'waiting_payment',
                 'started'
             ];
-    
+
             // Check if the request is for a user or driver
             $userApi = auth('user-api')->user();
             $driverApi = auth('driver-api')->user();
-    
+
             if ($userApi) {
                 // Check if the user has any active orders
                 $hasActiveOrders = \App\Models\Order::where('user_id', $userApi->id)
                     ->whereIn('status', $disallowedStatuses)
                     ->exists();
-    
+
                 if ($hasActiveOrders) {
                     return $this->error_response('You cannot delete your account while you have active or pending orders.', [], 400);
                 }
-    
+
                 // Deactivate and revoke tokens
                 $userApi->update(['activate' => 2]);
                 $userApi->tokens()->delete();
-    
+
                 return $this->success_response('User account deleted successfully', null);
-    
             } elseif ($driverApi) {
                 // Check if the driver has any active orders
                 $hasActiveOrders = \App\Models\Order::where('driver_id', $driverApi->id)
                     ->whereIn('status', $disallowedStatuses)
                     ->exists();
-    
+
                 if ($hasActiveOrders) {
                     return $this->error_response('You cannot delete your account while you have active or pending orders.', [], 400);
                 }
-    
+
                 // Deactivate and revoke tokens
                 $driverApi->update(['activate' => 2]);
                 $driverApi->tokens()->delete();
-    
+
                 return $this->success_response('Driver account deleted successfully', null);
-    
             } else {
                 return $this->error_response('Unauthenticated', [], 401);
             }
@@ -115,15 +112,15 @@ class AuthController extends Controller
         }
     }
 
-       public function logout()
+    public function logout()
     {
         try {
             // Check if the request is authenticated with user-api guard
             $userApi = auth('user-api')->user();
-            
+
             // Check if the request is authenticated with driver-api guard
             $driverApi = auth('driver-api')->user();
-            
+
             if ($userApi) {
                 // Revoke all tokens for user
                 $userApi->tokens()->delete();
@@ -142,7 +139,7 @@ class AuthController extends Controller
         }
     }
 
-     public function checkPhone(Request $request)
+    public function checkPhone(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'phone' => 'required|string',
@@ -158,14 +155,14 @@ class AuthController extends Controller
         $phone = $request->phone;
         $countryCode = $request->country_code; // Get country_code from request
         $userType = $request->user_type ?? 'user';
-        
+
         // Determine which model to check based on user_type
         $model = ($userType == 'driver') ? 'App\Models\Driver' : 'App\Models\User';
-        
+
         // Check both phone and country_code
         $user = $model::where('phone', $phone)
-                    ->where('country_code', $countryCode)
-                    ->first();
+            ->where('country_code', $countryCode)
+            ->first();
 
         if ($user) {
 
@@ -177,7 +174,7 @@ class AuthController extends Controller
 
             // Create access token
             $accessToken = $user->createToken('authToken')->accessToken;
-            
+
             return $this->success_response('Success', [
                 'user_exists' => true,
                 'account_status' => 'active',
@@ -198,7 +195,7 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $userType = $request->user_type ?? 'user';
-        
+
         // Different validation rules based on user type
         if ($userType == 'driver') {
             $validator = Validator::make($request->all(), [
@@ -211,7 +208,7 @@ class AuthController extends Controller
                 'option_ids' => 'required|array', // Changed to array
                 'option_ids.*' => 'required|exists:options,id', // Validate each option ID
                 'photo' => 'nullable|image|mimes:jpeg,png,jpg',
-                
+
                 // Car details
                 'passenger_number' => 'nullable',
                 'photo_of_car' => 'nullable|image|mimes:jpeg,png,jpg',
@@ -219,7 +216,7 @@ class AuthController extends Controller
                 'production_year' => 'nullable|string|max:4',
                 'color' => 'nullable|string|max:255',
                 'plate_number' => 'nullable|string|max:255',
-                
+
                 // Documents
                 'driving_license_front' => 'nullable|image|mimes:jpeg,png,jpg',
                 'driving_license_back' => 'nullable|image|mimes:jpeg,png,jpg',
@@ -237,11 +234,11 @@ class AuthController extends Controller
                 'photo' => 'nullable|image|mimes:jpeg,png,jpg',
             ]);
         }
-        
+
         if ($validator->fails()) {
             return $this->error_response('Validation error', $validator->errors());
         }
-        
+
         // Prepare data for user creation
         $userData = [
             'name' => $request->name,
@@ -251,54 +248,54 @@ class AuthController extends Controller
             'fcm_token' => $request->fcm_token,
             'balance' => 0,  // Default balance
         ];
-        
+
         // Add photo if uploaded
         if ($request->hasFile('photo')) {
             $userData['photo'] = uploadImage('assets/admin/uploads', $request->file('photo'));
         }
-        
+
         // Create user with the data
         if ($userType == 'driver') {
             // Add driver-specific fields
             $userData['sos_phone'] = $request->sos_phone;
             $userData['activate'] = 3; // waiting approve from admin
-            
+
             // Handle car image uploads
             if ($request->hasFile('photo_of_car')) {
                 $userData['photo_of_car'] = uploadImage('assets/admin/uploads', $request->file('photo_of_car'));
             }
-            
+
             // Add car details
             $userData['passenger_number'] = $request->passenger_number;
             $userData['model'] = $request->model;
             $userData['production_year'] = $request->production_year;
             $userData['color'] = $request->color;
             $userData['plate_number'] = $request->plate_number;
-            
+
             // Handle document uploads
             if ($request->hasFile('driving_license_front')) {
                 $userData['driving_license_front'] = uploadImage('assets/admin/uploads', $request->file('driving_license_front'));
             }
-            
+
             if ($request->hasFile('driving_license_back')) {
                 $userData['driving_license_back'] = uploadImage('assets/admin/uploads', $request->file('driving_license_back'));
             }
-            
+
             if ($request->hasFile('car_license_front')) {
                 $userData['car_license_front'] = uploadImage('assets/admin/uploads', $request->file('car_license_front'));
             }
-            
+
             if ($request->hasFile('car_license_back')) {
                 $userData['car_license_back'] = uploadImage('assets/admin/uploads', $request->file('car_license_back'));
             }
-            
+
             if ($request->hasFile('no_criminal_record')) {
                 $userData['no_criminal_record'] = uploadImage('assets/admin/uploads', $request->file('no_criminal_record'));
             }
-            
+
             // Create driver
             $user = \App\Models\Driver::create($userData);
-            
+
             // Attach options to the driver
             if ($request->has('option_ids') && is_array($request->option_ids)) {
                 foreach ($request->option_ids as $optionId) {
@@ -309,10 +306,10 @@ class AuthController extends Controller
             $userData['referral_code'] = $this->generateReferralCode();
             $user = User::create($userData);
         }
-        
+
         // Generate access token
         $accessToken = $user->createToken('authToken')->accessToken;
-        
+
         return $this->success_response('Registration successful', [
             'token' => $accessToken,
             'user' => $user,
@@ -325,11 +322,11 @@ class AuthController extends Controller
         try {
             // Check both authentication guards
             $userApi = auth('user-api')->user();
-            
+
             if ($userApi) {
                 // If it's a regular user
                 return $this->success_response('User profile retrieved', $userApi);
-            }else {
+            } else {
                 return $this->error_response('Unauthenticated', [], 401);
             }
         } catch (\Throwable $th) {
@@ -337,13 +334,13 @@ class AuthController extends Controller
             return $this->error_response('Failed to retrieve profile', []);
         }
     }
-   
+
     public function driverProfile()
     {
         try {
             $driverApi = auth('driver-api')->user();
-            
-           if ($driverApi) {
+
+            if ($driverApi) {
                 $driverApi->load('options');
                 return $this->success_response('Driver profile retrieved', $driverApi);
             } else {
@@ -355,7 +352,7 @@ class AuthController extends Controller
         }
     }
 
-     public function updateUserProfile(Request $request)
+    public function updateUserProfile(Request $request)
     {
         try {
             $user = auth('user-api')->user();
@@ -390,7 +387,6 @@ class AuthController extends Controller
             $user->update($data);
 
             return $this->success_response('User profile updated successfully', $user);
-
         } catch (\Throwable $th) {
             \Log::error('User Profile update error: ' . $th->getMessage());
             return $this->error_response('Failed to update profile', ['message' => $th->getMessage()]);
@@ -434,8 +430,15 @@ class AuthController extends Controller
             }
 
             $data = $request->only([
-                'name', 'email', 'phone', 'sos_phone', 'country_code',
-                'model', 'production_year', 'color', 'plate_number'
+                'name',
+                'email',
+                'phone',
+                'sos_phone',
+                'country_code',
+                'model',
+                'production_year',
+                'color',
+                'plate_number'
             ]);
 
             // Handle photo uploads
@@ -467,7 +470,6 @@ class AuthController extends Controller
             $driver->load('options');
 
             return $this->success_response('Driver profile updated successfully', $driver);
-
         } catch (\Throwable $th) {
             \Log::error('Driver Profile update error: ' . $th->getMessage());
             return $this->error_response('Failed to update profile', ['message' => $th->getMessage()]);
@@ -491,10 +493,10 @@ class AuthController extends Controller
         $notifications = Notification::query()
             ->where(function ($query) use ($user, $userTypeMapping) {
                 $query->where('type', 0) // Global notifications (for all users)
-                      ->orWhere(function ($q) use ($user) {
-                          // Notifications specifically for this user
-                          $q->where('type', 4)->where('user_id', $user->id);
-                      });
+                    ->orWhere(function ($q) use ($user) {
+                        // Notifications specifically for this user
+                        $q->where('type', 4)->where('user_id', $user->id);
+                    });
 
                 // Include user_type-specific notifications if applicable
                 if (isset($userTypeMapping[$user->user_type])) {
@@ -543,7 +545,7 @@ class AuthController extends Controller
         do {
             $referralCode = strtoupper(substr(md5(time() . rand(1000, 9999)), 0, 8));
         } while (User::where('referral_code', $referralCode)->exists());
-        
+
         return $referralCode;
     }
 }
