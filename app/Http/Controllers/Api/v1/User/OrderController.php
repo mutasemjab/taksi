@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Traits\Responses;
 use App\Models\OrderSpam;
 use App\Models\ServicePayment;
+use App\Models\Coupon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
@@ -114,8 +115,9 @@ class OrderController extends Controller
             'service_id' => 'required|exists:services,id',
             'total_price_before_discount' => 'nullable|numeric|min:0',
             'payment_method' => ['nullable', Rule::in(array_column(PaymentMethod::cases(), 'value'))],
+            'coupon_code' => 'nullable|string|exists:coupons,code',
         ]);
-    
+
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
@@ -123,35 +125,35 @@ class OrderController extends Controller
                 'errors' => $validator->errors()
             ], 422);
         }
-    
+
         try {
             $service = Service::where('id', $request->service_id)
-                             ->where('activate', 1)
-                             ->first();
-    
+                            ->where('activate', 1)
+                            ->first();
+
             if (!$service) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Service not found or inactive'
                 ], 404);
             }
-    
+
             // Default to cash if not provided
             $paymentMethodValue = $request->payment_method ?? PaymentMethod::Cash->value;
-    
+
             $isPaymentSupported = ServicePayment::where('service_id', $request->service_id)
                 ->where('payment_method', $paymentMethodValue)
                 ->exists();
-    
+
             if (!$isPaymentSupported) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Payment method not supported for this service'
                 ], 400);
             }
-    
+
             $number = Order::generateOrderNumber();
-    
+
             // Calculate price if not provided
             $calculatedPrice = $request->total_price_before_discount;
             if (!$calculatedPrice) {
@@ -163,18 +165,88 @@ class OrderController extends Controller
                 );
                 $calculatedPrice = $service->start_price + ($distance * $service->price_per_km);
             }
-    
+
+            // Initialize discount variables
+            $discountValue = 0;
+            $couponId = null;
+            $finalPrice = $calculatedPrice;
+
+            // Handle coupon validation and discount calculation
+            if ($request->coupon_code) {
+                $coupon = Coupon::where('code', $request->coupon_code)
+                            ->where('activate', 1)
+                            ->first();
+
+                if (!$coupon) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Coupon not found or inactive'
+                    ], 400);
+                }
+
+                // Check if coupon is valid (date range)
+                if (!$coupon->isValid()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Coupon has expired or not yet active'
+                    ], 400);
+                }
+
+                // Check minimum amount
+                if ($calculatedPrice < $coupon->minimum_amount) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Order amount does not meet minimum requirement for this coupon'
+                    ], 400);
+                }
+
+                // Check coupon type restrictions
+                if ($coupon->coupon_type == 2) { // First ride only
+                    $previousOrdersCount = Order::where('user_id', auth()->id())
+                                            ->whereIn('status', ['completed'])
+                                            ->count();
+                    
+                    if ($previousOrdersCount > 0) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'This coupon is only valid for first ride'
+                        ], 400);
+                    }
+                } elseif ($coupon->coupon_type == 3) { // Specific service only
+                    if ($coupon->service_id != $request->service_id) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'This coupon is not valid for the selected service'
+                        ], 400);
+                    }
+                }
+
+                // Calculate discount
+                if ($coupon->discount_type == 1) { // Fixed amount
+                    $discountValue = $coupon->discount;
+                } else { // Percentage
+                    $discountValue = ($calculatedPrice * $coupon->discount) / 100;
+                }
+
+                // Ensure discount doesn't exceed total price
+                $discountValue = min($discountValue, $calculatedPrice);
+                $finalPrice = $calculatedPrice - $discountValue;
+                $couponId = $coupon->id;
+            }
+
             $order = Order::create([
                 'number' => $number,
                 'status' => OrderStatus::Pending,
                 'payment_method' => PaymentMethod::from($paymentMethodValue),
                 'status_payment' => StatusPayment::Pending,
                 'total_price_before_discount' => $calculatedPrice,
-                'total_price_after_discount' => $calculatedPrice,
-                'net_price_for_driver' => $calculatedPrice,
+                'discount_value' => $discountValue,
+                'total_price_after_discount' => $finalPrice,
+                'net_price_for_driver' => $finalPrice, // You might want to adjust this based on your business logic
                 'commision_of_admin' => 1,
                 'user_id' => auth()->id(),
                 'service_id' => $request->service_id,
+                'coupon_id' => $couponId, // Note: You'll need to add this column to orders table
                 'pick_lat' => $request->start_lat,
                 'pick_lng' => $request->start_lng,
                 'pick_name' => $request->pick_name,
@@ -186,9 +258,9 @@ class OrderController extends Controller
                 $request->start_lng,
                 $request->end_lat,
                 $request->end_lng
-             ),
+            ),
             ]);
-    
+
             $result = $this->driverLocationService->findAndStoreOrderInFirebase(
                 $request->start_lat,
                 $request->start_lng,
@@ -197,7 +269,7 @@ class OrderController extends Controller
                 $request->radius ?? 10000,
                 OrderStatus::Pending->value
             );
-    
+
             return response()->json([
                 'status' => $result['success'],
                 'message' => $result['success'] 
@@ -205,8 +277,10 @@ class OrderController extends Controller
                     : $result['message'],
                 'data' => [
                     'order' => $order->id,
-                    'order' => $order->load('service'),
+                    'order' => $order->load(['service', 'coupon']),
                     'service' => $service,
+                    'coupon_applied' => $couponId ? true : false,
+                    'discount_applied' => $discountValue,
                     'drivers_notified' => $result['drivers_found'] ?? [],
                     'notifications_sent' => $result['notifications_sent'] ?? [],
                     'notifications_failed' => $result['notifications_failed'] ?? [],
@@ -220,7 +294,7 @@ class OrderController extends Controller
             ], 200);
         } catch (\Exception $e) {
             \Log::error('Error creating order: ' . $e->getMessage());
-    
+
             return response()->json([
                 'status' => false,
                 'message' => 'Error creating order: ' . $e->getMessage()

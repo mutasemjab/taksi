@@ -95,7 +95,6 @@ Route::group(['prefix' => 'v1/user'], function () {
         Route::post('/orders/{id}/cancel', [OrderController::class, 'cancelOrder']);
         Route::post('/orders/{id}/delivered', [OrderController::class, 'markAsDelivered']);
 
-        Route::get('/coupons', [CouponController::class, 'index']);
         Route::post('/coupons/validate', [CouponController::class, 'validateCoupon']);
     });
 });

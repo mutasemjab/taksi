@@ -308,7 +308,7 @@ class OrderDriverController extends Controller
             if ($newStatus === OrderStatus::UserWithDriver && is_null($order->trip_started_at)) {
                 $order->trip_started_at = now();
             }
-            
+
             // Calculate pricing for waiting payment
             $pricingDetails = null;
             if ($newStatus === OrderStatus::waitingPayment) {
@@ -318,9 +318,17 @@ class OrderDriverController extends Controller
                 $pricingDetails = $this->orderPaymentService->calculateFinalPrice($order);
                 
                 if ($pricingDetails['price_updated']) {
+                    // Update the order with new pricing including recalculated discount
+                    $order->total_price_before_discount = $pricingDetails['new_calculated_price'];
+                    $order->discount_value = $pricingDetails['final_discount_value'];
                     $order->total_price_after_discount = $pricingDetails['final_price'];
                     $order->net_price_for_driver = $pricingDetails['net_price_for_driver'];
                     $order->commision_of_admin = $pricingDetails['admin_commission'];
+                    
+                    // Log coupon recalculation if it happened
+                    if ($pricingDetails['coupon_recalculated']) {
+                        Log::info("Order {$order->id}: Coupon discount updated from {$pricingDetails['initial_discount']} to {$pricingDetails['final_discount_value']}");
+                    }
                 }
                 
                 if ($order->trip_started_at && !$order->trip_completed_at) {
