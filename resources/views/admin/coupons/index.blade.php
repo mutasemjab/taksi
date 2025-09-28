@@ -12,14 +12,6 @@
         </a>
     </div>
 
-    @if(session('success'))
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-        {{ session('success') }}
-        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-            <span aria-hidden="true">&times;</span>
-        </button>
-    </div>
-    @endif
 
     <!-- Coupons Table -->
     <div class="card shadow mb-4">
@@ -74,17 +66,7 @@
                                     <a href="{{ route('coupons.edit', $coupon->id) }}" class="btn btn-primary btn-sm">
                                         <i class="fas fa-edit"></i>
                                     </a>
-                                    <a href="#" class="btn btn-warning btn-sm" onclick="event.preventDefault(); document.getElementById('toggle-form-{{ $coupon->id }}').submit();">
-                                        @if($coupon->activate == 1)
-                                        <i class="fas fa-ban"></i>
-                                        @else
-                                        <i class="fas fa-check"></i>
-                                        @endif
-                                    </a>
-                                    <form id="toggle-form-{{ $coupon->id }}" action="{{ route('coupons.toggleActivation', $coupon->id) }}" method="POST" style="display: none;">
-                                        @csrf
-                                        @method('GET')
-                                    </form>
+                                  
                                     <a href="#" class="btn btn-danger btn-sm" onclick="event.preventDefault(); if(confirm('{{ __('messages.Delete_Confirm') }}')) document.getElementById('delete-form-{{ $coupon->id }}').submit();">
                                         <i class="fas fa-trash"></i>
                                     </a>
