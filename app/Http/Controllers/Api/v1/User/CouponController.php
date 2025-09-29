@@ -41,7 +41,7 @@ class CouponController extends Controller
             ->where('activate', 1)
             ->where('start_date', '<=', now())
             ->where('end_date', '>=', now())
-            ->with('service:id,name')
+            ->with('service')
             ->first();
 
         if (!$coupon) {
