@@ -347,30 +347,7 @@ class OrderController extends Controller
         
         $query = Order::where('user_id', $user->id);
         
-        // // Filter by status if provided
-        // if ($request->has('status')) {
-        //     $query->where('status', $request->status);
-        // }
-        
-        // // Filter by payment status if provided
-        // if ($request->has('payment_status')) {
-        //     $query->where('status_payment', $request->payment_status);
-        // }
-        
-        // // Filter by payment method if provided
-        // if ($request->has('payment_method')) {
-        //     $query->where('payment_method', $request->payment_method);
-        // }
-        
-        // // Filter by date range if provided
-        // if ($request->has('from_date')) {
-        //     $query->whereDate('created_at', '>=', $request->from_date);
-        // }
-        
-        // if ($request->has('to_date')) {
-        //     $query->whereDate('created_at', '<=', $request->to_date);
-        // }
-        
+      
         // Apply sorting
         $sortBy = $request->sort_by ?? 'created_at';
         $sortDirection = $request->sort_direction ?? 'desc';
@@ -385,7 +362,7 @@ class OrderController extends Controller
         
         // Pagination
         $perPage = $request->per_page ?? 15;
-        $orders = $query->with(['driver', 'service'])->paginate($perPage);
+        $orders = $query->with(['driver', 'service','coupon'])->paginate($perPage);
         
         // Transform data to include status text and other helper methods
        $orders->getCollection()->transform(function ($order) use ($user) {

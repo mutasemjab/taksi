@@ -87,7 +87,7 @@ class OrderDriverController extends Controller
         
         // Pagination
         $perPage = $request->per_page ?? 15;
-        $orders = $query->with(['user', 'service','driver'])->paginate($perPage);
+        $orders = $query->with(['user', 'service','driver','coupon'])->paginate($perPage);
         
         // Transform data to include status text and other helper methods
         $orders->getCollection()->transform(function ($order) {
