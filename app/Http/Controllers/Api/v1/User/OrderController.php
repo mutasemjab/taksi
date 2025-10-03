@@ -441,7 +441,7 @@ class OrderController extends Controller
             ->where('user_id', $user->id)
             ->with([
                 'driver','driver.ratings',
-                'service'
+                'service','coupon'
             ])
             ->first();
         

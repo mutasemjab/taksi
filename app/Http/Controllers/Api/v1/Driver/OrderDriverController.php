@@ -120,7 +120,7 @@ class OrderDriverController extends Controller
             ->where('driver_id', $driver->id)
             ->with([
                 'user:id,name,phone,country_code,photo,fcm_token','driver.ratings','driver',
-                'service'
+                'service','coupon'
             ])
             ->first();
         
