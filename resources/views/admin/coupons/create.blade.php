@@ -76,6 +76,11 @@
                     <div class="col-md-6">
                         <!-- Discount Information -->
                         <div class="form-group">
+                            <label for="discount">{{ __('messages.number_of_used') }}</label>
+                            <input type="number" class="form-control" id="number_of_used" name="number_of_used" value="{{ old('number_of_used', 0) }}">
+                        </div>
+                        
+                        <div class="form-group">
                             <label for="discount">{{ __('messages.Discount_Value') }} <span class="text-danger">*</span></label>
                             <input type="number" step="0.01" class="form-control" id="discount" name="discount" value="{{ old('discount', 0) }}" required min="0">
                         </div>

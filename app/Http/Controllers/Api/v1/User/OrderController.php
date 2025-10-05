@@ -103,7 +103,7 @@ class OrderController extends Controller
     }
    
 
-    public function createOrder(Request $request)
+   public function createOrder(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'pick_name' => 'required',
@@ -120,7 +120,7 @@ class OrderController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'message' => 'Validation failed',
                 'errors' => $validator->errors()
             ], 422);
@@ -133,7 +133,7 @@ class OrderController extends Controller
 
             if (!$service) {
                 return response()->json([
-                    'success' => false,
+                    'status' => false,
                     'message' => 'Service not found or inactive'
                 ], 404);
             }
@@ -147,9 +147,9 @@ class OrderController extends Controller
 
             if (!$isPaymentSupported) {
                 return response()->json([
-                    'success' => false,
+                    'status' => false,
                     'message' => 'Payment method not supported for this service'
-                ], 400);
+                ], 200);
             }
 
             $number = Order::generateOrderNumber();
@@ -179,25 +179,52 @@ class OrderController extends Controller
 
                 if (!$coupon) {
                     return response()->json([
-                        'success' => false,
+                        'status' => false,
                         'message' => 'Coupon not found or inactive'
-                    ], 400);
+                    ], 200);
                 }
 
                 // Check if coupon is valid (date range)
                 if (!$coupon->isValid()) {
                     return response()->json([
-                        'success' => false,
+                        'status' => false,
                         'message' => 'Coupon has expired or not yet active'
-                    ], 400);
+                    ], 200);
+                }
+
+                // Check if user has already used this coupon
+                $hasUsedCoupon = DB::table('user_coupons')
+                    ->where('user_id', auth()->id())
+                    ->where('coupon_id', $coupon->id)
+                    ->exists();
+
+                if ($hasUsedCoupon) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'You have already used this coupon'
+                    ], 200);
+                }
+
+                // Check coupon usage limit (if number_of_used is not null)
+                if (!is_null($coupon->number_of_used)) {
+                    $currentUsageCount = DB::table('user_coupons')
+                        ->where('coupon_id', $coupon->id)
+                        ->count();
+
+                    if ($currentUsageCount >= $coupon->number_of_used) {
+                        return response()->json([
+                            'status' => false,
+                            'message' => 'This coupon has reached its maximum usage limit'
+                        ], 200);
+                    }
                 }
 
                 // Check minimum amount
                 if ($calculatedPrice < $coupon->minimum_amount) {
                     return response()->json([
-                        'success' => false,
+                        'status' => false,
                         'message' => 'Order amount does not meet minimum requirement for this coupon'
-                    ], 400);
+                    ], 200);
                 }
 
                 // Check coupon type restrictions
@@ -208,16 +235,16 @@ class OrderController extends Controller
                     
                     if ($previousOrdersCount > 0) {
                         return response()->json([
-                            'success' => false,
+                            'status' => false,
                             'message' => 'This coupon is only valid for first ride'
-                        ], 400);
+                        ], 200);
                     }
                 } elseif ($coupon->coupon_type == 3) { // Specific service only
                     if ($coupon->service_id != $request->service_id) {
                         return response()->json([
-                            'success' => false,
+                            'status' => false,
                             'message' => 'This coupon is not valid for the selected service'
-                        ], 400);
+                        ], 200);
                     }
                 }
 
@@ -234,64 +261,85 @@ class OrderController extends Controller
                 $couponId = $coupon->id;
             }
 
-            $order = Order::create([
-                'number' => $number,
-                'status' => OrderStatus::Pending,
-                'payment_method' => PaymentMethod::from($paymentMethodValue),
-                'status_payment' => StatusPayment::Pending,
-                'total_price_before_discount' => $calculatedPrice,
-                'discount_value' => $discountValue,
-                'total_price_after_discount' => $finalPrice,
-                'net_price_for_driver' => $finalPrice, // You might want to adjust this based on your business logic
-                'commision_of_admin' => 1,
-                'user_id' => auth()->id(),
-                'service_id' => $request->service_id,
-                'coupon_id' => $couponId, // Note: You'll need to add this column to orders table
-                'pick_lat' => $request->start_lat,
-                'pick_lng' => $request->start_lng,
-                'pick_name' => $request->pick_name,
-                'drop_name' => $request->drop_name,
-                'drop_lat' => $request->end_lat,
-                'drop_lng' => $request->end_lng,
-                'estimated_time' => $this->calculateEstimatedTime(
-                $request->start_lat,
-                $request->start_lng,
-                $request->end_lat,
-                $request->end_lng
-            ),
-            ]);
+            // Use DB transaction to ensure data consistency
+            DB::beginTransaction();
 
-            $result = $this->driverLocationService->findAndStoreOrderInFirebase(
-                $request->start_lat,
-                $request->start_lng,
-                $order->id,
-                $request->service_id,
-                $request->radius ?? 10000,
-                OrderStatus::Pending->value
-            );
+            try {
+                $order = Order::create([
+                    'number' => $number,
+                    'status' => OrderStatus::Pending,
+                    'payment_method' => PaymentMethod::from($paymentMethodValue),
+                    'status_payment' => StatusPayment::Pending,
+                    'total_price_before_discount' => $calculatedPrice,
+                    'discount_value' => $discountValue,
+                    'total_price_after_discount' => $finalPrice,
+                    'net_price_for_driver' => $finalPrice,
+                    'commision_of_admin' => 1,
+                    'user_id' => auth()->id(),
+                    'service_id' => $request->service_id,
+                    'coupon_id' => $couponId,
+                    'pick_lat' => $request->start_lat,
+                    'pick_lng' => $request->start_lng,
+                    'pick_name' => $request->pick_name,
+                    'drop_name' => $request->drop_name,
+                    'drop_lat' => $request->end_lat,
+                    'drop_lng' => $request->end_lng,
+                    'estimated_time' => $this->calculateEstimatedTime(
+                        $request->start_lat,
+                        $request->start_lng,
+                        $request->end_lat,
+                        $request->end_lng
+                    ),
+                ]);
 
-            return response()->json([
-                'status' => $result['success'],
-                'message' => $result['success'] 
-                    ? 'Order created and drivers notified successfully' 
-                    : $result['message'],
-                'data' => [
-                    'order' => $order->id,
-                    'order' => $order->load(['service', 'coupon']),
-                    'service' => $service,
-                    'coupon_applied' => $couponId ? true : false,
-                    'discount_applied' => $discountValue,
-                    'drivers_notified' => $result['drivers_found'] ?? [],
-                    'notifications_sent' => $result['notifications_sent'] ?? [],
-                    'notifications_failed' => $result['notifications_failed'] ?? [],
-                    'user_location' => [
-                        'start_lat' => $request->start_lat,
-                        'start_lng' => $request->start_lng,
-                        'end_lat' => $request->end_lat,
-                        'end_lng' => $request->end_lng,
+                // Record coupon usage if a coupon was applied
+                if ($couponId) {
+                    DB::table('user_coupons')->insert([
+                        'coupon_id' => $couponId,
+                        'user_id' => auth()->id(),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+
+                DB::commit();
+
+                $result = $this->driverLocationService->findAndStoreOrderInFirebase(
+                    $request->start_lat,
+                    $request->start_lng,
+                    $order->id,
+                    $request->service_id,
+                    $request->radius ?? 10000,
+                    OrderStatus::Pending->value
+                );
+
+                return response()->json([
+                    'status' => $result['success'],
+                    'message' => $result['success'] 
+                        ? 'Order created and drivers notified successfully' 
+                        : $result['message'],
+                    'data' => [
+                        'order' => $order->load(['service', 'coupon']),
+                        'service' => $service,
+                        'coupon_applied' => $couponId ? true : false,
+                        'discount_applied' => $discountValue,
+                        'drivers_notified' => $result['drivers_found'] ?? [],
+                        'notifications_sent' => $result['notifications_sent'] ?? [],
+                        'notifications_failed' => $result['notifications_failed'] ?? [],
+                        'user_location' => [
+                            'start_lat' => $request->start_lat,
+                            'start_lng' => $request->start_lng,
+                            'end_lat' => $request->end_lat,
+                            'end_lng' => $request->end_lng,
+                        ]
                     ]
-                ]
-            ], 200);
+                ], 200);
+
+            } catch (\Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
+
         } catch (\Exception $e) {
             \Log::error('Error creating order: ' . $e->getMessage());
 
@@ -301,7 +349,6 @@ class OrderController extends Controller
             ], 500);
         }
     }
-
 
     private function calculateDistance($lat1, $lng1, $lat2, $lng2)
     {
