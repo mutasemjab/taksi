@@ -178,8 +178,7 @@ class HomeDriverController extends Controller
             // Get the most common area name in this cluster
             $areaName = collect($cluster['orders'])
                 ->pluck('pick_name')
-                ->mode()
-                ->first() ?? 'Unknown Area';
+                ->mode()[0] ?? 'Unknown Area';
             
             $clusters[] = [
                 'center_lat' => round($avgLat, 6),
