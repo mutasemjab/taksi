@@ -5,9 +5,7 @@
     <!-- Page Heading -->
     <div class="d-sm-flex align-items-center justify-content-between mb-4">
         <h1 class="h3 mb-0 text-gray-800">{{ __('messages.Complaints') }}</h1>
-        <a href="{{ route('complaints.create') }}" class="btn btn-sm btn-primary shadow-sm">
-            <i class="fas fa-plus fa-sm text-white-50"></i> {{ __('messages.Add_New_Complaint') }}
-        </a>
+     
     </div>
 
 
@@ -49,9 +47,7 @@
                                 <a href="{{ route('complaints.show', $complaint) }}" class="btn btn-info btn-sm">
                                     <i class="fas fa-eye"></i>
                                 </a>
-                                <a href="{{ route('complaints.edit', $complaint) }}" class="btn btn-primary btn-sm">
-                                    <i class="fas fa-edit"></i>
-                                </a>
+                             
                                 <form action="{{ route('complaints.destroy', $complaint) }}" method="POST" class="d-inline">
                                     @csrf
                                     @method('DELETE')

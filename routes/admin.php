@@ -121,7 +121,8 @@ Route::post('/reject/{id}', [WithdrawalRequestController::class, 'reject'])->nam
 // functionloty routes
 Route::post('drivers/topUp/{id}', [DriverController::class, 'topUp'])->name('drivers.topUp');
 Route::get('drivers/transactions/{id}', [DriverController::class, 'transactions'])->name('drivers.transactions');
-
+Route::post('/complaints/{complaint}/update-status', [ComplaintController::class, 'updateStatus'])
+    ->name('complaints.update-status');
 
 });
 });

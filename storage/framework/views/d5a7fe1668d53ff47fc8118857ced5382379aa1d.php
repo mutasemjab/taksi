@@ -3,14 +3,12 @@
     <!-- Page Heading -->
     <div class="d-sm-flex align-items-center justify-content-between mb-4">
         <h1 class="h3 mb-0 text-gray-800"><?php echo e(__('messages.Complaints')); ?></h1>
-        <a href="<?php echo e(route('admin.complaints.create')); ?>" class="btn btn-sm btn-primary shadow-sm">
+        <a href="<?php echo e(route('complaints.create')); ?>" class="btn btn-sm btn-primary shadow-sm">
             <i class="fas fa-plus fa-sm text-white-50"></i> <?php echo e(__('messages.Add_New_Complaint')); ?>
 
         </a>
     </div>
 
-    <!-- Alert Messages -->
-    <?php echo $__env->make('admin.common.alert', \Illuminate\Support\Arr::except(get_defined_vars(), ['__data', '__path']))->render(); ?>
 
     <!-- DataTales Example -->
     <div class="card shadow mb-4">
@@ -48,13 +46,13 @@
                             </td>
                             <td><?php echo e($complaint->created_at->format('Y-m-d H:i')); ?></td>
                             <td>
-                                <a href="<?php echo e(route('admin.complaints.show', $complaint)); ?>" class="btn btn-info btn-sm">
+                                <a href="<?php echo e(route('complaints.show', $complaint)); ?>" class="btn btn-info btn-sm">
                                     <i class="fas fa-eye"></i>
                                 </a>
-                                <a href="<?php echo e(route('admin.complaints.edit', $complaint)); ?>" class="btn btn-primary btn-sm">
+                                <a href="<?php echo e(route('complaints.edit', $complaint)); ?>" class="btn btn-primary btn-sm">
                                     <i class="fas fa-edit"></i>
                                 </a>
-                                <form action="<?php echo e(route('admin.complaints.destroy', $complaint)); ?>" method="POST" class="d-inline">
+                                <form action="<?php echo e(route('complaints.destroy', $complaint)); ?>" method="POST" class="d-inline">
                                     <?php echo csrf_field(); ?>
                                     <?php echo method_field('DELETE'); ?>
                                     <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('<?php echo e(__('messages.Are_You_Sure')); ?>')">
@@ -92,4 +90,4 @@
     });
 </script>
 <?php $__env->stopPush(); ?>
-<?php echo $__env->make('admin.layouts.app', \Illuminate\Support\Arr::except(get_defined_vars(), ['__data', '__path']))->render(); ?><?php /**PATH C:\xampp\htdocs\taksi\resources\views/admin/complaints/index.blade.php ENDPATH**/ ?>
+<?php echo $__env->make('layouts.admin', \Illuminate\Support\Arr::except(get_defined_vars(), ['__data', '__path']))->render(); ?><?php /**PATH C:\xampp\htdocs\taksi\resources\views/admin/complaints/index.blade.php ENDPATH**/ ?>
