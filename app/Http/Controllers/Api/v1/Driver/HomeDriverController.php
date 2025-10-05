@@ -72,7 +72,7 @@ class HomeDriverController extends Controller
      * Get today's hot spots (high demand pickup locations)
      * Returns the top locations with most orders today
      */
-    private function getTodayHotSpots($limit = 10, $radiusKm = 0.5)
+    private function getTodayHotSpots($limit = 20, $radiusKm = 10)
     {
         $today = now()->format('Y-m-d');
         
