@@ -159,6 +159,15 @@
                 </li>
                 @endcanany
 
+                @canany(['banner-table', 'banner-add', 'banner-edit', 'banner-delete'])
+                            <li class="nav-item">
+                                <a href="{{ route('banners.index') }}" class="nav-link {{ request()->routeIs('banners.index') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-file-alt"></i>
+                                    <p>{{ __('messages.Banners') }}</p>
+                                </a>
+                            </li>
+                @endcanany
+
                 @canany(['rating-table', 'rating-add', 'rating-edit', 'rating-delete'])
                             <li class="nav-item">
                                 <a href="{{ route('ratings.index') }}" class="nav-link {{ request()->routeIs('ratings.index') ? 'active' : '' }}">

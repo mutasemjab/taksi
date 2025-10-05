@@ -704,7 +704,14 @@ return [
     'Service_Created_Successfully' => 'تم إنشاء الخدمة بنجاح',
     'Service_Updated_Successfully' => 'تم تحديث الخدمة بنجاح',
     'Service_Deleted_Successfully' => 'تم حذف الخدمة بنجاح',
-    
+     'Banners' => 'البانرات',
+
+
+  // Banner
+  'banner_created' => 'تم إنشاء البانر بنجاح',
+  'banner_updated' => 'تم تحديث البانر بنجاح',
+  'banner_deleted' => 'تم حذف البانر بنجاح',
+  'banner_not_found' => 'البانر غير موجود',
    "" => "",
    "" => "",
    "" => "",
