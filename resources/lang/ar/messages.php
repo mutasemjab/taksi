@@ -601,6 +601,7 @@ return [
     // Confirmation Messages
     'confirm_delete' => 'هل أنت متأكد من أنك تريد حذف هذا الإعداد؟',
     "number_of_used"=>"عدد مرات الاستخدام",
+    'complaints' => 'الشكاوي',
     ""=>"",
     ""=>"",
     ""=>"",

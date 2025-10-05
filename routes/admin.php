@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\WalletTransactionController;
 use App\Http\Controllers\Admin\WithdrawalRequestController;
 use App\Http\Controllers\Admin\AppConfigController;
+use App\Http\Controllers\Admin\ComplaintController;
 use Mcamara\LaravelLocalization\Facades\LaravelLocalization;
 use Spatie\Permission\Models\Permission;
 /*
@@ -81,6 +82,7 @@ Route::prefix('pages')->group(function () {
 
 
 // Resource Route
+Route::resource('complaints', ComplaintController::class);
 Route::resource('app-configs', AppConfigController::class);
 Route::resource('settings', SettingController::class);
 Route::resource('users', UserController::class);

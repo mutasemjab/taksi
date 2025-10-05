@@ -1,17 +1,15 @@
-@extends('admin.layouts.app')
+@extends('layouts.admin')
 
 @section('content')
 <div class="container-fluid">
     <!-- Page Heading -->
     <div class="d-sm-flex align-items-center justify-content-between mb-4">
         <h1 class="h3 mb-0 text-gray-800">{{ __('messages.Complaints') }}</h1>
-        <a href="{{ route('admin.complaints.create') }}" class="btn btn-sm btn-primary shadow-sm">
+        <a href="{{ route('complaints.create') }}" class="btn btn-sm btn-primary shadow-sm">
             <i class="fas fa-plus fa-sm text-white-50"></i> {{ __('messages.Add_New_Complaint') }}
         </a>
     </div>
 
-    <!-- Alert Messages -->
-    @include('admin.common.alert')
 
     <!-- DataTales Example -->
     <div class="card shadow mb-4">
@@ -48,13 +46,13 @@
                             </td>
                             <td>{{ $complaint->created_at->format('Y-m-d H:i') }}</td>
                             <td>
-                                <a href="{{ route('admin.complaints.show', $complaint) }}" class="btn btn-info btn-sm">
+                                <a href="{{ route('complaints.show', $complaint) }}" class="btn btn-info btn-sm">
                                     <i class="fas fa-eye"></i>
                                 </a>
-                                <a href="{{ route('admin.complaints.edit', $complaint) }}" class="btn btn-primary btn-sm">
+                                <a href="{{ route('complaints.edit', $complaint) }}" class="btn btn-primary btn-sm">
                                     <i class="fas fa-edit"></i>
                                 </a>
-                                <form action="{{ route('admin.complaints.destroy', $complaint) }}" method="POST" class="d-inline">
+                                <form action="{{ route('complaints.destroy', $complaint) }}" method="POST" class="d-inline">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('{{ __('messages.Are_You_Sure') }}')">
