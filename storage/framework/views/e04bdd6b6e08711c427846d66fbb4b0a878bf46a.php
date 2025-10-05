@@ -162,6 +162,14 @@
                 </li>
                 <?php endif; ?>
 
+                <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->any(['rating-table', 'rating-add', 'rating-edit', 'rating-delete'])): ?>
+                            <li class="nav-item">
+                                <a href="<?php echo e(route('ratings.index')); ?>" class="nav-link <?php echo e(request()->routeIs('ratings.index') ? 'active' : ''); ?>">
+                                    <i class="nav-icon fas fa-file-alt"></i>
+                                    <p><?php echo e(__('messages.ratings')); ?></p>
+                                </a>
+                            </li>
+                <?php endif; ?>
                 <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->any(['complaint-table', 'complaint-add', 'complaint-edit', 'complaint-delete'])): ?>
                             <li class="nav-item">
                                 <a href="<?php echo e(route('complaints.index')); ?>" class="nav-link <?php echo e(request()->routeIs('complaints.index') ? 'active' : ''); ?>">

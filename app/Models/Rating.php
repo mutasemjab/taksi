@@ -10,13 +10,49 @@ class Rating extends Model
     use HasFactory;
     protected $guarded=[];
     
+      /**
+     * Get the user that owns the rating.
+     */
     public function user()
     {
-        return $this->belongsTo(User::class, 'user_id');
+        return $this->belongsTo(User::class);
     }
 
-    public function class()
+    /**
+     * Get the driver that owns the rating.
+     */
+    public function driver()
     {
-        return $this->belongsTo(Clas::class, 'clas_id');
+        return $this->belongsTo(Driver::class);
+    }
+
+    /**
+     * Get rating badge color.
+     */
+    public function getRatingBadgeAttribute()
+    {
+        return [
+            5 => 'success',
+            4 => 'info',
+            3 => 'warning',
+            2 => 'orange',
+            1 => 'danger',
+        ][$this->rating] ?? 'secondary';
+    }
+
+    /**
+     * Get stars display.
+     */
+    public function getStarsAttribute()
+    {
+        $stars = '';
+        for ($i = 1; $i <= 5; $i++) {
+            if ($i <= $this->rating) {
+                $stars .= '<i class="fas fa-star text-warning"></i>';
+            } else {
+                $stars .= '<i class="far fa-star text-warning"></i>';
+            }
+        }
+        return $stars;
     }
 }

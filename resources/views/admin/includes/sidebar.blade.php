@@ -159,6 +159,14 @@
                 </li>
                 @endcanany
 
+                @canany(['rating-table', 'rating-add', 'rating-edit', 'rating-delete'])
+                            <li class="nav-item">
+                                <a href="{{ route('ratings.index') }}" class="nav-link {{ request()->routeIs('ratings.index') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-file-alt"></i>
+                                    <p>{{ __('messages.Ratings') }}</p>
+                                </a>
+                            </li>
+                @endcanany
                 @canany(['complaint-table', 'complaint-add', 'complaint-edit', 'complaint-delete'])
                             <li class="nav-item">
                                 <a href="{{ route('complaints.index') }}" class="nav-link {{ request()->routeIs('complaints.index') ? 'active' : '' }}">

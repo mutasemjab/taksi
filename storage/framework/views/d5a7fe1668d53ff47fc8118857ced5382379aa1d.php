@@ -3,10 +3,7 @@
     <!-- Page Heading -->
     <div class="d-sm-flex align-items-center justify-content-between mb-4">
         <h1 class="h3 mb-0 text-gray-800"><?php echo e(__('messages.Complaints')); ?></h1>
-        <a href="<?php echo e(route('complaints.create')); ?>" class="btn btn-sm btn-primary shadow-sm">
-            <i class="fas fa-plus fa-sm text-white-50"></i> <?php echo e(__('messages.Add_New_Complaint')); ?>
-
-        </a>
+     
     </div>
 
 
@@ -49,9 +46,7 @@
                                 <a href="<?php echo e(route('complaints.show', $complaint)); ?>" class="btn btn-info btn-sm">
                                     <i class="fas fa-eye"></i>
                                 </a>
-                                <a href="<?php echo e(route('complaints.edit', $complaint)); ?>" class="btn btn-primary btn-sm">
-                                    <i class="fas fa-edit"></i>
-                                </a>
+                             
                                 <form action="<?php echo e(route('complaints.destroy', $complaint)); ?>" method="POST" class="d-inline">
                                     <?php echo csrf_field(); ?>
                                     <?php echo method_field('DELETE'); ?>
