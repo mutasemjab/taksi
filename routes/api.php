@@ -131,6 +131,7 @@ Route::group(['prefix' => 'v1/driver'], function () {
         Route::get('/getServices', [ServiceDriverController::class, 'index']);
         Route::post('/storeOrUpdateStatus', [ServiceDriverController::class, 'storeOrUpdateStatus']);
         Route::get('/wallet/transactions', [WalletDriverController::class, 'getTransactions']);
+        Route::post('/addBalanceToUser', [WalletDriverController::class, 'addBalanceToUser']);
 
         Route::get('/complaints', [ComplaintDriverController::class, 'getTransactions']);
 

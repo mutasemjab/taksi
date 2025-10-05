@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\v1\Driver;
 use App\Http\Controllers\Controller;
 use App\Models\CardNumber;
 use App\Models\CardUsage;
+use App\Models\Order;
 use App\Models\WalletTransaction;
 use App\Traits\Responses;
 use Illuminate\Http\Request;
@@ -68,7 +69,7 @@ class WalletDriverController extends Controller
         return $this->success_response('Driver wallet transactions retrieved successfully', $responseData);
     }
 
-public function useCard(Request $request)
+    public function useCard(Request $request)
     {
         \Log::info('useCard method called', ['request_data' => $request->all()]);
         
@@ -286,6 +287,117 @@ public function useCard(Request $request)
                 'amount' => $request->amount
             ]);
             return $this->error_response(__('messages.error_adding_balance') . ': ' . $e->getMessage(),[]);
+        }
+    }
+
+
+    public function addBalanceToUser(Request $request)
+    {
+        // Validate request
+        $validator = Validator::make($request->all(), [
+            'order_id' => 'required|exists:orders,id',
+            'amount' => 'required|numeric|min:0.01',
+            'note' => 'nullable|string|max:500'
+        ]);
+
+        if ($validator->fails()) {
+            return $this->error_response($validator->errors()->first(), 422);
+        }
+
+        // Get authenticated driver
+        $driver = auth('driver-api')->user();
+
+        // Get the order
+        $order = Order::with('user')->find($request->order_id);
+
+        // Validate order belongs to this driver
+        if ($order->driver_id != $driver->id) {
+            return $this->error_response('This order does not belong to you', 403);
+        }
+
+        // Validate order status is waiting_payment
+        if ($order->status != 'waiting_payment') {
+            return $this->error_response('Order status must be waiting_payment to add balance', 400);
+        }
+
+        // Validate payment method is cash
+        if ($order->payment_method != 'cash') {
+            return $this->error_response('This operation is only for cash payment orders', 400);
+        }
+
+        // Check if user exists
+        if (!$order->user) {
+            return $this->error_response('User not found for this order', 404);
+        }
+
+        // Check if driver has sufficient balance
+        if ($driver->balance < $request->amount) {
+            return $this->error_response('Insufficient balance in your wallet. Your balance: ' . $driver->balance . ', Required: ' . $request->amount, 400);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Deduct amount from driver's wallet balance
+            $driver->decrement('balance', $request->amount);
+
+            // Add amount to user's wallet balance
+            $order->user->increment('balance', $request->amount);
+
+            // Create wallet transaction record for USER (add balance)
+            $userTransaction = WalletTransaction::create([
+                'order_id' => $order->id,
+                'user_id' => $order->user_id,
+                'driver_id' => $driver->id,
+                'admin_id' => null,
+                'amount' => $request->amount,
+                'type_of_transaction' => 1, // 1 = add
+                'note' => $request->note ?? "Change returned by driver from order #{$order->number}"
+            ]);
+
+            // Create wallet transaction record for DRIVER (withdrawal)
+            $driverTransaction = WalletTransaction::create([
+                'order_id' => $order->id,
+                'user_id' => $order->user_id,
+                'driver_id' => $driver->id,
+                'admin_id' => null,
+                'amount' => $request->amount,
+                'type_of_transaction' => 2, // 2 = withdrawal
+                'note' => $request->note ?? "Change paid to user from order #{$order->number}"
+            ]);
+
+
+            DB::commit();
+
+            return $this->success_response('Balance transferred successfully', [
+                'user_transaction' => [
+                    'id' => $userTransaction->id,
+                    'amount' => $userTransaction->amount,
+                    'type' => 'credit',
+                    'user_id' => $order->user_id,
+                    'user_name' => $order->user->name,
+                    'note' => $userTransaction->note
+                ],
+                'driver_transaction' => [
+                    'id' => $driverTransaction->id,
+                    'amount' => $driverTransaction->amount,
+                    'type' => 'debit',
+                    'driver_id' => $driver->id,
+                    'driver_new_balance' => $driver->fresh()->balance,
+                    'note' => $driverTransaction->note
+                ],
+                'order' => [
+                    'id' => $order->id,
+                    'number' => $order->number,
+                    'status' => $order->status,
+                    'status_payment' => $order->status_payment
+                ],
+                'transaction_date' => now()->format('Y-m-d H:i:s')
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->error_response('Failed to transfer balance: ' . $e->getMessage(), 500);
         }
     }
 }
