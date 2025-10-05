@@ -215,11 +215,7 @@
                             </td>
                             <td>{{ $rating->created_at->format('Y-m-d H:i') }}</td>
                             <td>
-                                <a href="{{ route('ratings.show', $rating) }}" 
-                                   class="btn btn-sm btn-info" 
-                                   title="{{ __('messages.View') }}">
-                                    <i class="fas fa-eye"></i>
-                                </a>
+                              
                                 <form action="{{ route('ratings.destroy', $rating) }}" 
                                       method="POST" 
                                       style="display: inline-block;"
