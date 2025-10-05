@@ -12,15 +12,6 @@
         </a>
     </div>
 
-    @if(session('success'))
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-        {{ session('success') }}
-        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-            <span aria-hidden="true">&times;</span>
-        </button>
-    </div>
-    @endif
-
     <!-- Services Table -->
     <div class="card shadow mb-4">
         <div class="card-header py-3">
@@ -34,11 +25,11 @@
                             <th>{{ __('messages.ID') }}</th>
                             <th>{{ __('messages.Photo') }}</th>
                             <th>{{ __('messages.Name') }}</th>
-                            <th>{{ __('messages.Start_Price') }}</th>
-                            <th>{{ __('messages.Price_Per_KM') }}</th>
+                            <th>{{ __('messages.Pricing') }}</th>
                             <th>{{ __('messages.Commission') }}</th>
                             <th>{{ __('messages.Payment_Method') }}</th>
                             <th>{{ __('messages.Capacity') }}</th>
+                            <th>{{ __('messages.Status') }}</th>
                             <th>{{ __('messages.Actions') }}</th>
                         </tr>
                     </thead>
@@ -54,31 +45,57 @@
                                 @endif
                             </td>
                             <td>
-                                <div>{{ $service->name_en }}</div>
-                                <div class="text-muted">{{ $service->name_ar }}</div>
+                                <div><strong>{{ $service->name_en }}</strong></div>
+                                <div class="text-muted small">{{ $service->name_ar }}</div>
+                                @if($service->is_electric == 1)
+                                <span class="badge badge-success mt-1">
+                                    <i class="fas fa-bolt"></i> {{ __('messages.Electric') }}
+                                </span>
+                                @endif
                             </td>
-                            <td>{{ $service->start_price }}</td>
-                            <td>{{ $service->price_per_km }}</td>
+                            <td>
+                                <div class="small">
+                                    <strong><i class="fas fa-sun text-warning"></i> {{ __('messages.Morning') }}:</strong><br>
+                                    {{ __('messages.Start') }}: {{ $service->start_price_morning }}<br>
+                                    {{ __('messages.Per_KM') }}: {{ $service->price_per_km_morning }}
+                                </div>
+                                <hr class="my-1">
+                                <div class="small">
+                                    <strong><i class="fas fa-moon text-info"></i> {{ __('messages.Evening') }}:</strong><br>
+                                    {{ __('messages.Start') }}: {{ $service->start_price_evening }}<br>
+                                    {{ __('messages.Per_KM') }}: {{ $service->price_per_km_evening }}
+                                </div>
+                            </td>
                             <td>
                                 {{ $service->admin_commision }}
                                 <span class="badge badge-info">{{ $service->getCommisionTypeText() }}</span>
                             </td>
                             <td>
-                               @foreach($service->servicePayments as $payment)
-                                    <span class="badge badge-primary">{{ $payment->payment_method_text }}</span>
+                                @foreach($service->servicePayments as $payment)
+                                    <span class="badge badge-primary mb-1">{{ $payment->payment_method_text }}</span>
                                 @endforeach
-
                             </td>
-                            <td>{{ $service->capacity }}</td>
+                            <td>
+                                <span class="badge badge-secondary">
+                                    <i class="fas fa-users"></i> {{ $service->capacity }}
+                                </span>
+                            </td>
+                            <td>
+                                @if($service->activate == 1)
+                                    <span class="badge badge-success">{{ __('messages.Active') }}</span>
+                                @else
+                                    <span class="badge badge-danger">{{ __('messages.Inactive') }}</span>
+                                @endif
+                            </td>
                             <td>
                                 <div class="btn-group">
-                                    <a href="{{ route('services.show', $service->id) }}" class="btn btn-info btn-sm">
+                                    <a href="{{ route('services.show', $service->id) }}" class="btn btn-info btn-sm" title="{{ __('messages.View') }}">
                                         <i class="fas fa-eye"></i>
                                     </a>
-                                    <a href="{{ route('services.edit', $service->id) }}" class="btn btn-primary btn-sm">
+                                    <a href="{{ route('services.edit', $service->id) }}" class="btn btn-primary btn-sm" title="{{ __('messages.Edit') }}">
                                         <i class="fas fa-edit"></i>
                                     </a>
-                                    <a href="#" class="btn btn-danger btn-sm" onclick="event.preventDefault(); if(confirm('{{ __('messages.Delete_Confirm') }}')) document.getElementById('delete-form-{{ $service->id }}').submit();">
+                                    <a href="#" class="btn btn-danger btn-sm" title="{{ __('messages.Delete') }}" onclick="event.preventDefault(); if(confirm('{{ __('messages.Delete_Confirm') }}')) document.getElementById('delete-form-{{ $service->id }}').submit();">
                                         <i class="fas fa-trash"></i>
                                     </a>
                                     <form id="delete-form-{{ $service->id }}" action="{{ route('services.destroy', $service->id) }}" method="POST" style="display: none;">
@@ -100,7 +117,10 @@
 @section('script')
 <script>
     $(document).ready(function() {
-        $('#dataTable').DataTable();
+        $('#dataTable').DataTable({
+            "order": [[0, "desc"]],
+            "pageLength": 25
+        });
     });
 </script>
 @endsection

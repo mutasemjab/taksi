@@ -59,22 +59,7 @@
                     </div>
                     
                     <div class="col-md-6">
-                        <!-- Pricing Information -->
-                        <div class="form-group">
-                            <label for="start_price">{{ __('messages.price_of_real_one_minute') }} <span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" class="form-control" id="price_of_real_one_minute" name="price_of_real_one_minute" value="{{ old('price_of_real_one_minute', 0) }}" required min="0">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="start_price">{{ __('messages.Start_Price') }} <span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" class="form-control" id="start_price" name="start_price" value="{{ old('start_price', 0) }}" required min="0">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="price_per_km">{{ __('messages.Price_Per_KM') }} <span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" class="form-control" id="price_per_km" name="price_per_km" value="{{ old('price_per_km', 0) }}" required min="0">
-                        </div>
-                        
+                        <!-- Other Settings -->
                         <div class="form-group">
                             <label for="waiting_time">{{ __('messages.Waiting_Time') }} <span class="text-danger">*</span></label>
                             <input type="number" step="0.01" class="form-control" id="waiting_time" name="waiting_time" value="{{ old('waiting_time', 0) }}" required min="0">
@@ -85,12 +70,83 @@
                             <label for="cancellation_fee">{{ __('messages.Cancellation_Fee') }} <span class="text-danger">*</span></label>
                             <input type="number" step="0.01" class="form-control" id="cancellation_fee" name="cancellation_fee" value="{{ old('cancellation_fee', 0) }}" required min="0">
                         </div>
+
+                        <div class="form-group">
+                            <label for="is_electric">{{ __('messages.is_electric') }} <span class="text-danger">*</span></label>
+                            <select class="form-control" id="is_electric" name="is_electric" required>
+                                <option value="1" {{ old('is_electric', 1) == 1 ? 'selected' : '' }}>{{ __('messages.Yes') }}</option>
+                                <option value="2" {{ old('is_electric') == 2 ? 'selected' : '' }}>{{ __('messages.No') }}</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="activate">{{ __('messages.Status') }} <span class="text-danger">*</span></label>
+                            <select class="form-control" id="activate" name="activate" required>
+                                <option value="1" {{ old('activate', 1) == 1 ? 'selected' : '' }}>{{ __('messages.Active') }}</option>
+                                <option value="2" {{ old('activate') == 2 ? 'selected' : '' }}>{{ __('messages.Inactive') }}</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+
+                <!-- Morning Pricing -->
+                <h5 class="text-primary mb-3"><i class="fas fa-sun"></i> {{ __('messages.Morning_Pricing') }}</h5>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="start_price_morning">{{ __('messages.Start_Price') }} ({{ __('messages.Morning') }}) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" class="form-control" id="start_price_morning" name="start_price_morning" value="{{ old('start_price_morning', 0) }}" required min="0">
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="price_per_km_morning">{{ __('messages.Price_Per_KM') }} ({{ __('messages.Morning') }}) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" class="form-control" id="price_per_km_morning" name="price_per_km_morning" value="{{ old('price_per_km_morning', 0) }}" required min="0">
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="price_of_real_one_minute_morning">{{ __('messages.price_of_real_one_minute') }} ({{ __('messages.Morning') }}) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" class="form-control" id="price_of_real_one_minute_morning" name="price_of_real_one_minute_morning" value="{{ old('price_of_real_one_minute_morning', 0) }}" required min="0">
+                        </div>
+                    </div>
+                </div>
+
+                <hr>
+
+                <!-- Evening Pricing -->
+                <h5 class="text-warning mb-3"><i class="fas fa-moon"></i> {{ __('messages.Evening_Pricing') }}</h5>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="start_price_evening">{{ __('messages.Start_Price') }} ({{ __('messages.Evening') }}) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" class="form-control" id="start_price_evening" name="start_price_evening" value="{{ old('start_price_evening', 0) }}" required min="0">
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="price_per_km_evening">{{ __('messages.Price_Per_KM') }} ({{ __('messages.Evening') }}) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" class="form-control" id="price_per_km_evening" name="price_per_km_evening" value="{{ old('price_per_km_evening', 0) }}" required min="0">
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="price_of_real_one_minute_evening">{{ __('messages.price_of_real_one_minute') }} ({{ __('messages.Evening') }}) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" class="form-control" id="price_of_real_one_minute_evening" name="price_of_real_one_minute_evening" value="{{ old('price_of_real_one_minute_evening', 0) }}" required min="0">
+                        </div>
                     </div>
                 </div>
                 
                 <hr>
                 
                 <!-- Commission and Payment Settings -->
+                <h5 class="text-success mb-3"><i class="fas fa-cog"></i> {{ __('messages.Commission_and_Payment') }}</h5>
                 <div class="row">
                     <div class="col-md-6">
                         <div class="form-group">
@@ -105,45 +161,31 @@
                                 <option value="2" {{ old('type_of_commision') == 2 ? 'selected' : '' }}>{{ __('messages.Percentage') }}</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label for="type_of_commision">{{ __('messages.is_electric') }} <span class="text-danger">*</span></label>
-                            <select class="form-control" id="is_electric" name="is_electric" required>
-                                <option value="1" {{ old('is_electric', 1) == 1 ? 'selected' : '' }}>{{ __('messages.Yes') }}</option>
-                                <option value="2" {{ old('is_electric') == 2 ? 'selected' : '' }}>{{ __('messages.No') }}</option>
-                            </select>
-                        </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label>{{ __('Payment Methods') }}</label>
-                        <div class="checkbox-list">
-                            <label class="checkbox">
-                                <input type="checkbox" name="payment_methods[]" value="cash" {{ old('payment_methods') && in_array('cash', old('payment_methods')) ? 'checked' : '' }}>
-                                <span></span>{{ __('Cash') }}
-                            </label>
-                            <label class="checkbox">
-                                <input type="checkbox" name="payment_methods[]" value="visa" {{ old('payment_methods') && in_array('visa', old('payment_methods')) ? 'checked' : '' }}>
-                                <span></span>{{ __('Visa') }}
-                            </label>
-                            <label class="checkbox">
-                                <input type="checkbox" name="payment_methods[]" value="wallet" {{ old('payment_methods') && in_array('wallet', old('payment_methods')) ? 'checked' : '' }}>
-                                <span></span>{{ __('Wallet') }}
-                            </label>
-                        </div>
-                        @error('payment_methods')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
+                    <div class="col-md-6">
                         <div class="form-group">
-                            <label for="activate">{{ __('messages.Status') }} <span class="text-danger">*</span></label>
-                            <select class="form-control" id="activate" name="activate" required>
-                                <option value="1" {{ old('activate', 1) == 1 ? 'selected' : '' }}>{{ __('messages.Active') }}</option>
-                                <option value="2" {{ old('activate') == 2 ? 'selected' : '' }}>{{ __('messages.Inactive') }}</option>
-                            </select>
-                     </div>
+                            <label>{{ __('Payment Methods') }} <span class="text-danger">*</span></label>
+                            <div class="checkbox-list">
+                                <label class="checkbox">
+                                    <input type="checkbox" name="payment_methods[]" value="cash" {{ old('payment_methods') && in_array('cash', old('payment_methods')) ? 'checked' : '' }}>
+                                    <span></span>{{ __('Cash') }}
+                                </label>
+                                <label class="checkbox">
+                                    <input type="checkbox" name="payment_methods[]" value="visa" {{ old('payment_methods') && in_array('visa', old('payment_methods')) ? 'checked' : '' }}>
+                                    <span></span>{{ __('Visa') }}
+                                </label>
+                                <label class="checkbox">
+                                    <input type="checkbox" name="payment_methods[]" value="wallet" {{ old('payment_methods') && in_array('wallet', old('payment_methods')) ? 'checked' : '' }}>
+                                    <span></span>{{ __('Wallet') }}
+                                </label>
+                            </div>
+                            @error('payment_methods')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
                 </div>
-
-               
 
                 <div class="form-group text-center mt-4">
                     <button type="submit" class="btn btn-primary">

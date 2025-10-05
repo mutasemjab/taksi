@@ -301,7 +301,7 @@ class WalletDriverController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->error_response($validator->errors()->first(), 422);
+            return $this->error_response($validator->errors()->first(), []);
         }
 
         // Get authenticated driver

@@ -12,6 +12,7 @@ use App\Models\Service;
 use App\Models\ServicePayment;
 use App\Enums\PaymentMethod;
 use Illuminate\Validation\Rule;
+
 class ServiceController extends Controller
 {
     /**
@@ -41,15 +42,18 @@ class ServiceController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-     public function store(Request $request)
+    public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'name_en' => 'required|string|max:255',
             'name_ar' => 'required|string|max:255',
             'photo' => 'required|image|mimes:jpeg,png,jpg|max:2048',
-            'start_price' => 'required|numeric|min:0',
-            'price_per_km' => 'required|numeric|min:0',
-            'price_of_real_one_minute' => 'required|numeric|min:0',
+            'start_price_morning' => 'required|numeric|min:0',
+            'start_price_evening' => 'required|numeric|min:0',
+            'price_per_km_morning' => 'required|numeric|min:0',
+            'price_per_km_evening' => 'required|numeric|min:0',
+            'price_of_real_one_minute_morning' => 'required|numeric|min:0',
+            'price_of_real_one_minute_evening' => 'required|numeric|min:0',
             'admin_commision' => 'required|numeric|min:0',
             'activate' => 'required|boolean',
             'type_of_commision' => 'required|in:1,2',
@@ -110,57 +114,60 @@ class ServiceController extends Controller
         return view('admin.services.edit', compact('service'));
     }
 
-   public function update(Request $request, $id)
-{
-    $service = Service::findOrFail($id);
+    public function update(Request $request, $id)
+    {
+        $service = Service::findOrFail($id);
 
-    $validator = Validator::make($request->all(), [
-        'name_en' => 'required|string|max:255',
-        'name_ar' => 'required|string|max:255',
-        'photo' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
-        'start_price' => 'required|numeric|min:0',
-        'price_per_km' => 'required|numeric|min:0',
-        'price_of_real_one_minute' => 'required|numeric|min:0',
-        'admin_commision' => 'required|numeric|min:0',
-        'activate' => 'required|boolean',
-        'type_of_commision' => 'required|in:1,2',
-        'is_electric' => 'required|in:1,2',
-        'payment_methods' => 'required|array',
-        'payment_methods.*' => [
-            'required',
-            Rule::in(array_column(PaymentMethod::cases(), 'value')),
-        ],
-        'capacity' => 'required|integer|min:0',
-        'waiting_time' => 'required|numeric|min:0',
-        'cancellation_fee' => 'required|numeric|min:0',
-    ]);
-
-    if ($validator->fails()) {
-        return redirect()->route('services.edit', $id)->withErrors($validator)->withInput();
-    }
-
-    $serviceData = $request->except(['photo', 'payment_methods']);
-
-    if ($request->has('photo')) {
-        if ($service->photo && file_exists('assets/admin/uploads/' . $service->photo)) {
-            unlink('assets/admin/uploads/' . $service->photo);
-        }
-        $serviceData['photo'] = uploadImage('assets/admin/uploads', $request->photo);
-    }
-
-    $service->update($serviceData);
-
-    $service->servicePayments()->delete();
-
-    foreach ($request->payment_methods as $method) {
-        ServicePayment::create([
-            'service_id' => $service->id,
-            'payment_method' => PaymentMethod::from($method),
+        $validator = Validator::make($request->all(), [
+            'name_en' => 'required|string|max:255',
+            'name_ar' => 'required|string|max:255',
+            'photo' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+            'start_price_morning' => 'required|numeric|min:0',
+            'start_price_evening' => 'required|numeric|min:0',
+            'price_per_km_morning' => 'required|numeric|min:0',
+            'price_per_km_evening' => 'required|numeric|min:0',
+            'price_of_real_one_minute_morning' => 'required|numeric|min:0',
+            'price_of_real_one_minute_evening' => 'required|numeric|min:0',
+            'admin_commision' => 'required|numeric|min:0',
+            'activate' => 'required|boolean',
+            'type_of_commision' => 'required|in:1,2',
+            'is_electric' => 'required|in:1,2',
+            'payment_methods' => 'required|array',
+            'payment_methods.*' => [
+                'required',
+                Rule::in(array_column(PaymentMethod::cases(), 'value')),
+            ],
+            'capacity' => 'required|integer|min:0',
+            'waiting_time' => 'required|numeric|min:0',
+            'cancellation_fee' => 'required|numeric|min:0',
         ]);
-    }
 
-    return redirect()->route('services.index')->with('success', __('messages.Service_Updated_Successfully'));
-}
+        if ($validator->fails()) {
+            return redirect()->route('services.edit', $id)->withErrors($validator)->withInput();
+        }
+
+        $serviceData = $request->except(['photo', 'payment_methods']);
+
+        if ($request->has('photo')) {
+            if ($service->photo && file_exists('assets/admin/uploads/' . $service->photo)) {
+                unlink('assets/admin/uploads/' . $service->photo);
+            }
+            $serviceData['photo'] = uploadImage('assets/admin/uploads', $request->photo);
+        }
+
+        $service->update($serviceData);
+
+        $service->servicePayments()->delete();
+
+        foreach ($request->payment_methods as $method) {
+            ServicePayment::create([
+                'service_id' => $service->id,
+                'payment_method' => PaymentMethod::from($method),
+            ]);
+        }
+
+        return redirect()->route('services.index')->with('success', __('messages.Service_Updated_Successfully'));
+    }
     
     /**
      * Remove the specified resource from storage.

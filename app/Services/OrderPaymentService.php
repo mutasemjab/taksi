@@ -228,6 +228,32 @@ class OrderPaymentService
         Log::info("Wallet payment processed - {$totalPrice} deducted from user {$user->id}, {$driverEarning} added to driver {$driver->id} for order {$order->id}");
     }
 
+    /**
+     * Determine if current time is morning or evening
+     * Morning: before 18:00 (6 PM)
+     * Evening: 18:00 (6 PM) and after
+     */
+    private function isEveningTime($dateTime = null)
+    {
+        $checkTime = $dateTime ?? now();
+        $hour = $checkTime->format('H');
+        return $hour >= 18;
+    }
+
+    /**
+     * Get appropriate pricing fields based on time of day
+     */
+    private function getTimePeriodPricing($service, $dateTime = null)
+    {
+        $isEvening = $this->isEveningTime($dateTime);
+        
+        return [
+            'period' => $isEvening ? 'evening' : 'morning',
+            'start_price' => $isEvening ? $service->start_price_evening : $service->start_price_morning,
+            'price_per_km' => $isEvening ? $service->price_per_km_evening : $service->price_per_km_morning,
+            'price_per_minute' => $isEvening ? $service->price_of_real_one_minute_evening : $service->price_of_real_one_minute_morning,
+        ];
+    }
 
     /**
      * Calculate final price based on settings and trip duration
@@ -249,17 +275,23 @@ class OrderPaymentService
         $discountValue = $order->discount_value; // Default to existing discount
 
         if ($pricingMethod == 1 && $order->trip_started_at) {
-            // Time-based pricing calculation
+            // Time-based pricing calculation with morning/evening rates
             $tripDurationMinutes = $order->trip_started_at->diffInMinutes(now());
-            $pricePerMinute = $order->service->price_of_real_one_minute ?? 0;
+            
+            // Get pricing based on current time period
+            $timePricing = $this->getTimePeriodPricing($order->service);
+            
+            $pricePerMinute = $timePricing['price_per_minute'];
+            $startPrice = $timePricing['start_price'];
             $realPriceBasedOnTime = $tripDurationMinutes * $pricePerMinute;
-            $newCalculatedPrice = $order->service->start_price + $realPriceBasedOnTime;
+            $newCalculatedPrice = $startPrice + $realPriceBasedOnTime;
 
             $pricingDetails = array_merge($pricingDetails, [
                 'price_updated' => true,
+                'time_period' => $timePricing['period'],
                 'trip_duration_minutes' => $tripDurationMinutes,
                 'price_per_minute' => $pricePerMinute,
-                'service_start_price' => $order->service->start_price,
+                'service_start_price' => $startPrice,
                 'time_based_price' => $realPriceBasedOnTime,
                 'new_calculated_price' => $newCalculatedPrice,
             ]);
