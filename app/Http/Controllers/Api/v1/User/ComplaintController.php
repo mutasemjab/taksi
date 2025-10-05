@@ -54,7 +54,7 @@ class ComplaintController extends Controller
 
         // Transform data to include status name
         $complaints->getCollection()->transform(function ($complaint) {
-            $complaint->status_name = $complaint->getStatusNameAttribute();
+            $complaint->status_name = $complaint->getStatusLabelAttribute();
             return $complaint;
         });
 
@@ -116,7 +116,7 @@ class ComplaintController extends Controller
         $complaint->save();
 
         // Add status name to response
-        $complaint->status_name = $complaint->getStatusNameAttribute();
+        $complaint->status_name = $complaint->getStatusLabelAttribute();
 
         return $this->success_response('Complaint submitted successfully', $complaint);
     }
@@ -140,7 +140,7 @@ class ComplaintController extends Controller
         }
 
         // Add status name and load relationships
-        $complaint->status_name = $complaint->getStatusNameAttribute();
+        $complaint->status_name = $complaint->getStatusLabelAttribute();
         $complaint->load(['driver:id,name,phone,photo', 'order:id,order_number,created_at,total']);
 
         return $this->success_response('Complaint details retrieved successfully', $complaint);
@@ -190,7 +190,7 @@ class ComplaintController extends Controller
         $complaint->save();
 
         // Add status name to response
-        $complaint->status_name = $complaint->getStatusNameAttribute();
+        $complaint->status_name = $complaint->getStatusLabelAttribute();
 
         return $this->success_response('Complaint updated successfully', $complaint);
     }
