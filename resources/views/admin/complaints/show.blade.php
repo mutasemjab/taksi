@@ -80,7 +80,7 @@
             <div class="row">
                 <div class="col-md-12">
                     <h5 class="font-weight-bold">{{ __('messages.Update_Status') }}</h5>
-                    <form id="updateStatusForm">
+                   <form action="{{ route('complaints.update-status', $complaint) }}" method="POST">
                         @csrf
                         <div class="form-group">
                             <label for="status">{{ __('messages.Status') }}</label>
@@ -98,31 +98,3 @@
     </div>
 </div>
 @endsection
-
-@push('script')
-<script>
-    $(document).ready(function() {
-        $('#updateStatusForm').on('submit', function(e) {
-            e.preventDefault();
-            
-            $.ajax({
-                url: "{{ route('complaints.update-status', $complaint) }}",
-                method: 'POST',
-                data: {
-                    _token: "{{ csrf_token() }}",
-                    status: $('#status').val()
-                },
-                success: function(response) {
-                    if (response.success) {
-                        toastr.success(response.message);
-                        location.reload();
-                    }
-                },
-                error: function(xhr) {
-                    toastr.error(xhr.responseJSON.error);
-                }
-            });
-        });
-    });
-</script>
-@endpush

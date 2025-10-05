@@ -563,6 +563,13 @@ return [
 
     'number_of_used' => 'Number of used',
     'complaints' => 'Complaints',
+     'View_Complaint' => 'View Complaint',
+    'Complaint_Details' => 'Complaint Details',
+    'Subject' => 'Subject',
+    'Description' => 'Description',
+    'Order_ID' => 'Order ID',
+    'Done' => 'Done',
+    'Order' => 'Order',
     '' => '',
     '' => '',
     '' => '',

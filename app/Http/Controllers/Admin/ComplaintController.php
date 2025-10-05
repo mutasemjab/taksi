@@ -52,17 +52,12 @@ class ComplaintController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['error' => $validator->errors()->first()], 422);
+            return back()->withErrors($validator)->withInput();
         }
 
         $complaint->update(['status' => $request->status]);
 
-        return response()->json([
-            'success' => true,
-            'message' => __('messages.Status_Updated_Successfully'),
-            'status_label' => $complaint->status_label,
-            'status_badge' => $complaint->status_badge
-        ]);
+        return back()->with('success', __('messages.Status_Updated_Successfully'));
     }
 
     /**
