@@ -103,19 +103,19 @@ class NotificationApiController extends Controller
 
             if ($response) {
                 return response()->json([
-                    'success' => true,
+                    'status' => true,
                     'message' => 'Notification sent successfully to driver'
                 ], 200);
             } else {
                 return response()->json([
-                    'success' => false,
+                    'status' => false,
                     'message' => 'Failed to send notification to driver'
                 ], 400);
             }
         } catch (\Exception $e) {
             \Log::error('FCM Error: ' . $e->getMessage());
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'message' => 'An error occurred: ' . $e->getMessage()
             ], 500);
         }

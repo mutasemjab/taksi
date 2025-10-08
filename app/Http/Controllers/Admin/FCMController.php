@@ -16,10 +16,10 @@ class FCMController extends BaseController
 {
     use AuthorizesRequests, DispatchesJobs, ValidatesRequests;
 
-    public static function sendMessage($title, $body, $fcmToken, $userId, $screen = "order")
+    public static function sendMessage($title, $body, $fcmToken, $userId, $screen = "order", $userType = "user")
     {
         if (!$fcmToken) {
-            \Log::error("FCM Error: No FCM token provided for user ID $userId");
+            \Log::error("FCM Error: No FCM token provided for $userType ID $userId");
             return false;
         }
 
@@ -34,7 +34,7 @@ class FCMController extends BaseController
             $tokenResponse = $client->getAccessToken();
 
             $access_token = $tokenResponse['access_token'];
-            \Log::info("FCM Access Token for user ID $userId: " . $access_token);
+            \Log::info("FCM Access Token for $userType ID $userId: " . $access_token);
 
             $headers = [
                 "Authorization: Bearer $access_token",
@@ -68,30 +68,39 @@ class FCMController extends BaseController
             curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-            curl_setopt($ch, CURLOPT_VERBOSE, true); // Enable verbose output for debugging
+            curl_setopt($ch, CURLOPT_VERBOSE, true);
             $result = curl_exec($ch);
             $err = curl_error($ch);
             curl_close($ch);
 
             if ($result === false || $err) {
-                \Log::error("FCM Error for user ID $userId: cURL Error: " . $err);
+                \Log::error("FCM Error for $userType ID $userId: cURL Error: " . $err);
                 return false;
             } else {
                 $response = json_decode($result, true);
-                \Log::info("FCM Response for user ID $userId: " . json_encode($response));
+                \Log::info("FCM Response for $userType ID $userId: " . json_encode($response));
+                
                 if (isset($response['name'])) {
                     return true;
                 } else {
-                    \Log::error("FCM Error for user ID $userId: " . json_encode($response));
-                    if (isset($response['error']['details'][0]['errorCode']) && $response['error']['details'][0]['errorCode'] === 'UNREGISTERED') {
-                        \Log::info("FCM token cleanup for user ID $userId");
-                        User::where('id', $userId)->update(['fcm_token' => null]);
+                    \Log::error("FCM Error for $userType ID $userId: " . json_encode($response));
+                    
+                    // Clear invalid token based on user type
+                    if (isset($response['error']['details'][0]['errorCode']) && 
+                        $response['error']['details'][0]['errorCode'] === 'UNREGISTERED') {
+                        \Log::info("FCM token cleanup for $userType ID $userId");
+                        
+                        // if ($userType === 'driver') {
+                        //     Driver::where('id', $userId)->update(['fcm_token' => null]);
+                        // } else {
+                        //     User::where('id', $userId)->update(['fcm_token' => null]);
+                        // }
                     }
                     return false;
                 }
             }
         } catch (\Exception $e) {
-            \Log::error("FCM Error for user ID $userId: " . $e->getMessage());
+            \Log::error("FCM Error for $userType ID $userId: " . $e->getMessage());
             return false;
         }
     }
@@ -142,57 +151,50 @@ class FCMController extends BaseController
 
 
     
-  public static function sendChatMessageToUser($message, $user_id, $sender_driver_id): bool
-{
-    // Find the user
-    $user = User::find($user_id);
-    if (!$user || is_null($user->fcm_token)) {
-        \Log::error("User not found or has no FCM token for user ID " . $user_id);
-        return false;
+    public static function sendChatMessageToDriver($message, $driver_id, $sender_user_id): bool
+    {
+        $driver = Driver::find($driver_id);
+        if (!$driver || is_null($driver->fcm_token)) {
+            \Log::error("Driver not found or has no FCM token for driver ID " . $driver_id);
+            return false;
+        }
+
+        $user = User::find($sender_user_id);
+        $userName = $user ? $user->name : 'User';
+
+        // Pass 'driver' as the userType parameter
+        $sent = self::sendMessage($userName, $message, $driver->fcm_token, $driver->id, "chat", "driver");
+
+        if ($sent) {
+            \Log::info("Chat notification sent to driver ID " . $driver_id . " from user ID " . $sender_user_id);
+        } else {
+            \Log::error("Failed to send notification to driver ID " . $driver_id);
+        }
+
+        return $sent;
     }
 
-    // Find the driver (sender)
-    $driver = Driver::find($sender_driver_id);
-    $driverName = $driver ? $driver->name : 'Driver';
+    public static function sendChatMessageToUser($message, $user_id, $sender_driver_id): bool
+    {
+        $user = User::find($user_id);
+        if (!$user || is_null($user->fcm_token)) {
+            \Log::error("User not found or has no FCM token for user ID " . $user_id);
+            return false;
+        }
 
-    // Send notification using your existing sendMessage method
-    $sent = self::sendMessage($driverName, $message, $user->fcm_token, $user->id, "chat");
+        $driver = Driver::find($sender_driver_id);
+        $driverName = $driver ? $driver->name : 'Driver';
 
-    if ($sent) {
-        \Log::info("Chat notification sent to user ID " . $user_id . " from driver ID " . $sender_driver_id);
-    } else {
-        \Log::error("Failed to send notification to user ID " . $user_id);
+        // Pass 'user' as the userType parameter (or omit it since 'user' is default)
+        $sent = self::sendMessage($driverName, $message, $user->fcm_token, $user->id, "chat", "user");
+
+        if ($sent) {
+            \Log::info("Chat notification sent to user ID " . $user_id . " from driver ID " . $sender_driver_id);
+        } else {
+            \Log::error("Failed to send notification to user ID " . $user_id);
+        }
+
+        return $sent;
     }
-
-    return $sent;
-}
-
-
-
-public static function sendChatMessageToDriver($message, $driver_id, $sender_user_id): bool
-{
-    // Find the driver
-    $driver = Driver::find($driver_id);
-    if (!$driver || is_null($driver->fcm_token)) {
-        \Log::error("Driver not found or has no FCM token for driver ID " . $driver_id);
-        return false;
-    }
-
-    // Find the user (sender)
-    $user = User::find($sender_user_id);
-    $userName = $user ? $user->name : 'User';
-
-    // Send notification using your existing sendMessage method
-    $sent = self::sendMessage($userName, $message, $driver->fcm_token, $driver->id, "chat");
-
-    if ($sent) {
-        \Log::info("Chat notification sent to driver ID " . $driver_id . " from user ID " . $sender_user_id);
-    } else {
-        \Log::error("Failed to send notification to driver ID " . $driver_id);
-    }
-
-    return $sent;
-}
-
 
 }
