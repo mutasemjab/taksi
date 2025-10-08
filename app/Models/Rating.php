@@ -25,6 +25,10 @@ class Rating extends Model
     {
         return $this->belongsTo(Driver::class);
     }
+    public function order()
+    {
+        return $this->belongsTo(Order::class);
+    }
 
     /**
      * Get rating badge color.

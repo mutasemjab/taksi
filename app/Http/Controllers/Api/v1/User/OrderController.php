@@ -419,7 +419,7 @@ class OrderController extends Controller
         $order->distance = $order->getDistance();
     
         $hasRated = \App\Models\Rating::where('user_id', $user->id)
-            ->where('driver_id', $order->driver_id)
+            ->where('order_id', $order->id)->where('driver_id', $order->driver_id)
             ->exists();
     
         $order->is_review = $hasRated ? 1 : 2;
@@ -481,7 +481,7 @@ class OrderController extends Controller
         $order->discount_percentage = $order->getDiscountPercentage();
         
         $hasRated = \App\Models\Rating::where('user_id', $user->id)
-            ->where('driver_id', $order->driver_id)
+            ->where('order_id', $order->id)->where('driver_id', $order->driver_id)
             ->exists();
         
         $order->is_review = $hasRated ? 1 : 2;

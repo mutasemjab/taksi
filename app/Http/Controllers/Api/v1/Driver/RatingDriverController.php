@@ -17,7 +17,7 @@ class RatingDriverController extends Controller
      public function index()
     {
         $driver_id = auth()->guard('driver-api')->user()->id;
-        $data = Rating::where('driver_id',$driver_id)->get();
+        $data = Rating::with('user','order')->where('driver_id',$driver_id)->get();
 
        return $this->success_response('Rating get successfully', $data);
     }
