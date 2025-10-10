@@ -80,7 +80,7 @@
 
                         <div class="form-group">
                             <label for="discount">{{ __('messages.number_of_used') }}</label>
-                            <input type="number" class="form-control" id="number_of_used" name="number_of_used" value="{{ old('number_of_used', , $coupon->number_of_used) }}">
+                            <input type="number" class="form-control" id="number_of_used" name="number_of_used" value="{{ old('number_of_used', $coupon->number_of_used) }}">
                         </div>
 
                         <div class="form-group">

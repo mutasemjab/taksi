@@ -162,11 +162,20 @@
                 </li>
                 <?php endif; ?>
 
+                <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->any(['banner-table', 'banner-add', 'banner-edit', 'banner-delete'])): ?>
+                            <li class="nav-item">
+                                <a href="<?php echo e(route('banners.index')); ?>" class="nav-link <?php echo e(request()->routeIs('banners.index') ? 'active' : ''); ?>">
+                                    <i class="nav-icon fas fa-file-alt"></i>
+                                    <p><?php echo e(__('messages.Banners')); ?></p>
+                                </a>
+                            </li>
+                <?php endif; ?>
+
                 <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->any(['rating-table', 'rating-add', 'rating-edit', 'rating-delete'])): ?>
                             <li class="nav-item">
                                 <a href="<?php echo e(route('ratings.index')); ?>" class="nav-link <?php echo e(request()->routeIs('ratings.index') ? 'active' : ''); ?>">
                                     <i class="nav-icon fas fa-file-alt"></i>
-                                    <p><?php echo e(__('messages.ratings')); ?></p>
+                                    <p><?php echo e(__('messages.Ratings')); ?></p>
                                 </a>
                             </li>
                 <?php endif; ?>
