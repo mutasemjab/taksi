@@ -40,10 +40,7 @@
                             <h4 class="text-primary font-weight-bold">{{ $coupon->getFormattedDiscount() }}</h4>
                             <span class="badge badge-info">{{ $coupon->getDiscountTypeText() }}</span>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <h5>{{ __('messages.Min_Amount') }}</h5>
-                            <h4 class="text-primary font-weight-bold">{{ $coupon->minimum_amount }}</h4>
-                        </div>
+                       
                     </div>
 
                     <hr>
@@ -121,90 +118,7 @@
                 </div>
             </div>
             
-            <!-- Coupon Usage Examples -->
-            <div class="card shadow mb-4">
-                <div class="card-header py-3 bg-light">
-                    <h6 class="m-0 font-weight-bold text-primary">{{ __('messages.Usage_Examples') }}</h6>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h5 class="card-title">{{ __('messages.Example_1') }}</h5>
-                                    <p class="mb-1">{{ __('messages.Ride_Cost') }}: <strong>{{ $exampleAmount = 100 }}</strong></p>
-                                    <p class="mb-1">{{ __('messages.Minimum_Required') }}: <strong>{{ $coupon->minimum_amount }}</strong></p>
-                                    
-                                    @if($exampleAmount >= $coupon->minimum_amount)
-                                        <p class="mb-1">{{ __('messages.Discount_Applied') }}: 
-                                            <strong class="text-success">
-                                                @if($coupon->discount_type == 1)
-                                                    {{ $coupon->discount }}
-                                                @else
-                                                    {{ ($coupon->discount / 100) * $exampleAmount }}
-                                                    ({{ $coupon->discount }}%)
-                                                @endif
-                                            </strong>
-                                        </p>
-                                        <p class="mb-1">{{ __('messages.Final_Price') }}: 
-                                            <strong class="text-primary">
-                                                @if($coupon->discount_type == 1)
-                                                    {{ max(0, $exampleAmount - $coupon->discount) }}
-                                                @else
-                                                    {{ $exampleAmount - (($coupon->discount / 100) * $exampleAmount) }}
-                                                @endif
-                                            </strong>
-                                        </p>
-                                    @else
-                                        <div class="alert alert-warning mt-2">
-                                            {{ __('messages.Minimum_Not_Met') }}
-                                        </div>
-                                    @endif
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-md-6 mb-3">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h5 class="card-title">{{ __('messages.Example_2') }}</h5>
-                                    @php
-                                        $exampleAmount2 = 200;
-                                    @endphp
-                                    <p class="mb-1">{{ __('messages.Ride_Cost') }}: <strong>{{ $exampleAmount2 }}</strong></p>
-                                    <p class="mb-1">{{ __('messages.Minimum_Required') }}: <strong>{{ $coupon->minimum_amount }}</strong></p>
-                                    
-                                    @if($exampleAmount2 >= $coupon->minimum_amount)
-                                        <p class="mb-1">{{ __('messages.Discount_Applied') }}: 
-                                            <strong class="text-success">
-                                                @if($coupon->discount_type == 1)
-                                                    {{ $coupon->discount }}
-                                                @else
-                                                    {{ ($coupon->discount / 100) * $exampleAmount2 }}
-                                                    ({{ $coupon->discount }}%)
-                                                @endif
-                                            </strong>
-                                        </p>
-                                        <p class="mb-1">{{ __('messages.Final_Price') }}: 
-                                            <strong class="text-primary">
-                                                @if($coupon->discount_type == 1)
-                                                    {{ max(0, $exampleAmount2 - $coupon->discount) }}
-                                                @else
-                                                    {{ $exampleAmount2 - (($coupon->discount / 100) * $exampleAmount2) }}
-                                                @endif
-                                            </strong>
-                                        </p>
-                                    @else
-                                        <div class="alert alert-warning mt-2">
-                                            {{ __('messages.Minimum_Not_Met') }}
-                                        </div>
-                                    @endif
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+         
         </div>
     </div>
 </div>
