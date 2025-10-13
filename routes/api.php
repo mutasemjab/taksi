@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\v1\Driver\OrderDriverController;
 use App\Http\Controllers\Api\v1\Driver\RatingDriverController;
 use App\Http\Controllers\Api\v1\Driver\ServiceDriverController;
 use App\Http\Controllers\Api\v1\Driver\HomeDriverController;
+use App\Http\Controllers\Api\v1\Driver\HotSpotsController;
 use App\Http\Controllers\Api\v1\Driver\WalletDriverController;
 use App\Http\Controllers\Api\v1\Driver\WithdrawalRequestDriverController;
 use Illuminate\Http\Request;
@@ -109,6 +110,7 @@ Route::group(['prefix' => 'v1/driver'], function () {
     // Auth Route
     Route::group(['middleware' => ['auth:driver-api', 'check.driver.activation']], function () {
 
+        Route::get('/hotSpots', [HotSpotsController::class, 'index']);
         Route::get('/getStatusOfDriver', [AuthController::class, 'getStatusOfDriver']);
         Route::get('/active', [AuthController::class, 'active']);
         Route::post('/updateStatus', [AuthController::class, 'updateStatusOnOff']);

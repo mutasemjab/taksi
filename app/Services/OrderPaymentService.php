@@ -237,7 +237,7 @@ class OrderPaymentService
     {
         $checkTime = $dateTime ?? now();
         $hour = $checkTime->format('H');
-        return $hour >= 18;
+        return $hour >= 22 || $hour < 6;
     }
 
     /**
