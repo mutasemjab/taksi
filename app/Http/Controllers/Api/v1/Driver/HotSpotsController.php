@@ -17,7 +17,7 @@ class HotSpotsController extends Controller
     public function index(Request $request)
     {
         $limit = $request->input('limit', 20);
-        $radiusKm = $request->input('radius', 10);
+        $radiusKm = $request->input('radius', 1);
         
         $hotSpots = $this->getTodayHotSpots($limit, $radiusKm);
         
@@ -28,7 +28,7 @@ class HotSpotsController extends Controller
      * Get today's hot spots (high demand pickup locations)
      * Returns the top locations with most orders today
      */
-    private function getTodayHotSpots($limit = 20, $radiusKm = 10)
+    private function getTodayHotSpots($limit = 20, $radiusKm = 1)
     {
         $today = now()->format('Y-m-d');
         
