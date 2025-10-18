@@ -87,7 +87,8 @@ class HotSpotsController extends Controller
     /**
      * Cluster nearby locations together based on radius
      */
-    private function clusterLocations($orders, $radiusKm)
+  
+    private function clusterLocations($orders, $radiusKm = 1)
     {
         $clusters = [];
         $processed = [];
@@ -97,15 +98,14 @@ class HotSpotsController extends Controller
                 continue;
             }
             
-            // Create a new cluster
-            $cluster = [
-                'orders' => [$order],
-                'indices' => [$index]
-            ];
+            // This order becomes the center of a new cluster
+            $clusterOrders = [$order];
+            $clusterIndices = [$index];
+            $processed[] = $index;
             
-            // Find nearby orders
+            // Find all other orders within radiusKm of this order
             foreach ($orders as $compareIndex => $compareOrder) {
-                if ($index === $compareIndex || in_array($compareIndex, $processed)) {
+                if (in_array($compareIndex, $processed)) {
                     continue;
                 }
                 
@@ -116,32 +116,22 @@ class HotSpotsController extends Controller
                     $compareOrder->pick_lng
                 );
                 
-                // If within radius, add to cluster
+                // If within radius, add to this cluster
                 if ($distance <= $radiusKm) {
-                    $cluster['orders'][] = $compareOrder;
-                    $cluster['indices'][] = $compareIndex;
+                    $clusterOrders[] = $compareOrder;
+                    $clusterIndices[] = $compareIndex;
                     $processed[] = $compareIndex;
                 }
             }
             
-            $processed[] = $index;
-            
-            // Calculate cluster center (average of all points)
-            $avgLat = collect($cluster['orders'])->avg('pick_lat');
-            $avgLng = collect($cluster['orders'])->avg('pick_lng');
-            $orderCount = count($cluster['orders']);
-            
-            // Get the most common area name in this cluster
-            $areaName = collect($cluster['orders'])
-                ->pluck('pick_name')
-                ->mode()[0] ?? 'Unknown Area';
-            
+            // Create cluster using the first order's coordinates as center
             $clusters[] = [
-                'center_lat' => round($avgLat, 6),
-                'center_lng' => round($avgLng, 6),
-                'area_name' => $areaName,
-                'order_count' => $orderCount,
-                'percentage' => round(($orderCount / $orders->count()) * 100, 1)
+                'center_lat' => $order->pick_lat,  // Use exact coordinates of first order
+                'center_lng' => $order->pick_lng,  // Use exact coordinates of first order
+                'area_name' => $order->pick_name,  // Use area name of first order
+                'order_count' => count($clusterOrders),
+                'percentage' => round((count($clusterOrders) / $orders->count()) * 100, 1),
+                'orders_in_cluster' => $clusterOrders // Optional: keep reference to all orders in cluster
             ];
         }
         
