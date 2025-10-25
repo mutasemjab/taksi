@@ -43,6 +43,7 @@ Route::group(['prefix' => 'v1/user'], function () {
     Route::get('/getOptions', [OptionController::class, 'getOptions']);
     Route::post('/check-phone', [AuthController::class, 'checkPhone']);
     Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/resendOtp', [AuthController::class, 'resendOtp']);
 
     Route::get('/settings', [SettingController::class, 'index']);
     Route::post('/services', [ServicesController::class, 'index']);
