@@ -220,7 +220,7 @@ class AuthController extends Controller
             $otpValidator = Validator::make($request->all(), [
                 'phone' => 'required|string',
                 'country_code' => 'required|string',
-                'otp' => 'required|string',
+                'otp' => 'nullable|string',
                 'user_type' => 'nullable|in:user,driver'
             ]);
 
