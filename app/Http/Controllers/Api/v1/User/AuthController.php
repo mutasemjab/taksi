@@ -21,12 +21,12 @@ class AuthController extends Controller
 {
     use Responses;
 
-    protected $otpService;
+    // protected $otpService;
 
-    public function __construct(OTPService $otpService)
-    {
-        $this->otpService = $otpService;
-    }
+    // public function __construct(OTPService $otpService)
+    // {
+    //     $this->otpService = $otpService;
+    // }
 
 
     public function updateStatusOnOff()
@@ -148,7 +148,7 @@ class AuthController extends Controller
     }
 
     public function checkPhone(Request $request)
-        {
+    {
             $validator = Validator::make($request->all(), [
                 'phone' => 'required|string',
                 'country_code' => 'required|string', // Added country_code validation
@@ -192,24 +192,30 @@ class AuthController extends Controller
                 ]);
             }
 
-            // User doesn't exist, send OTP for registration
-            $fullPhone = $countryCode . $phone;
-            $otpResult = $this->otpService->sendOTP($fullPhone);
+            return $this->success_response('Phone number not registered. OTP sent for registration', [
+                 'user_exists' => false,
+                 'user_type' => $userType,
+                 'country_code' => $countryCode, // Also return country_code in response
+               //  'debug_otp' => $otpResult['otp'] ?? null, // Only in debug mode
+             ]);
+            // // User doesn't exist, send OTP for registration
+            // $fullPhone = $countryCode . $phone;
+            // $otpResult = $this->otpService->sendOTP($fullPhone);
 
-            if ($otpResult['success']) {
-                return $this->success_response('Phone number not registered. OTP sent for registration', [
-                    'user_exists' => false,
-                    'user_type' => $userType,
-                    'country_code' => $countryCode, // Also return country_code in response
-                    'debug_otp' => $otpResult['otp'] ?? null, // Only in debug mode
-                ]);
-            } else {
-                return $this->error_response($otpResult['message'], $otpResult['error'] ?? null);
-            }
-        }
+            // if ($otpResult['success']) {
+            //     return $this->success_response('Phone number not registered. OTP sent for registration', [
+            //         'user_exists' => false,
+            //         'user_type' => $userType,
+            //         'country_code' => $countryCode, // Also return country_code in response
+            //         'debug_otp' => $otpResult['otp'] ?? null, // Only in debug mode
+            //     ]);
+            // } else {
+            //     return $this->error_response($otpResult['message'], $otpResult['error'] ?? null);
+            // }
+    }
 
-        public function register(Request $request)
-        {
+    public function register(Request $request)
+    {
             // First validate OTP
             $otpValidator = Validator::make($request->all(), [
                 'phone' => 'required|string',
@@ -226,11 +232,11 @@ class AuthController extends Controller
             $fullPhone = $request->country_code . $request->phone;
 
             // Verify OTP first
-            $otpResult = $this->otpService->verifyOTPWithTestCase($fullPhone, $request->otp);
+          //  $otpResult = $this->otpService->verifyOTPWithTestCase($fullPhone, $request->otp);
 
-            if (!$otpResult['success']) {
-                return $this->error_response($otpResult['message'], $otpResult['error_code'] ?? null);
-            }
+            // if (!$otpResult['success']) {
+            //     return $this->error_response($otpResult['message'], $otpResult['error_code'] ?? null);
+            // }
 
             // Different validation rules based on user type
             if ($userType == 'driver') {
@@ -351,18 +357,18 @@ class AuthController extends Controller
                 'user' => $user,
                 'new_user' => true,
                 'otp_verified' => true,
-                'is_test_case' => $otpResult['is_test_case'] ?? false
+                //'is_test_case' => $otpResult['is_test_case'] ?? false
             ]);
-        }
+    }
 
-        /**
-         * Resend OTP for registration
-         *
-         * @param Request $request
-         * @return \Illuminate\Http\JsonResponse
-         */
-        public function resendOtp(Request $request)
-        {
+    /**
+     * Resend OTP for registration
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function resendOtp(Request $request)
+    {
             $request->validate([
                 'phone' => 'required|string',
                 'country_code' => 'required|string',
@@ -380,7 +386,7 @@ class AuthController extends Controller
             } else {
                 return $this->error_response($otpResult['message'], $otpResult['error'] ?? null);
             }
-        }
+    }
 
 
     public function userProfile()
