@@ -705,7 +705,22 @@ return [
     'Service_Updated_Successfully' => 'تم تحديث الخدمة بنجاح',
     'Service_Deleted_Successfully' => 'تم حذف الخدمة بنجاح',
      'Banners' => 'البانرات',
-
+   'driver_alerts' => 'بلاغات السائقين',
+    'ID' => 'المعرف',
+    'Driver' => 'السائق',
+    'Report' => 'التقرير',
+    'Lat' => 'خط العرض',
+    'Lng' => 'خط الطول',
+    'Note' => 'ملاحظة',
+    'Status' => 'الحالة',
+    'Created_At' => 'تاريخ الإنشاء',
+    'Actions' => 'الإجراءات',
+    'Pending' => 'قيد الانتظار',
+    'Done' => 'تم',
+    'Delete' => 'حذف',
+    'New Alert' => 'تنبيه مهم',
+    'Notify_Nearby' => 'إشعار القريبين',
+    'Delete_Confirm' => 'هل تريد حذف هذا البلاغ؟',
 
   // Banner
   'banner_created' => 'تم إنشاء البانر بنجاح',

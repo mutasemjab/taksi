@@ -51,6 +51,22 @@ return [
 
     'Banners' => 'Banners',
 
+       'driver_alerts' => 'Driver Alerts',
+    'ID' => 'ID',
+    'Driver' => 'Driver',
+    'Report' => 'Report',
+    'Lat' => 'Latitude',
+    'Lng' => 'Longitude',
+    'Note' => 'Note',
+    'Status' => 'Status',
+    'Created_At' => 'Created At',
+    'Actions' => 'Actions',
+    'Pending' => 'Pending',
+    'Done' => 'Done',
+    'Delete' => 'Delete',
+    'Notify_Nearby' => 'Notify Nearby',
+    'Delete_Confirm' => 'Delete this alert?',
+    'New Alert' => 'New Alert',
 
    
     // Banner

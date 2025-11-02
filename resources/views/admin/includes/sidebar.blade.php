@@ -167,6 +167,15 @@
                                 </a>
                             </li>
                 @endcanany
+              
+                @canany(['driver_alert-table', 'driver_alert-add', 'driver_alert-edit', 'driver_alert-delete'])
+                            <li class="nav-item">
+                                <a href="{{ route('admin.driver_alerts.index') }}" class="nav-link {{ request()->routeIs('admin.driver_alerts.index') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-file-alt"></i>
+                                    <p>{{ __('messages.driver_alerts') }}</p>
+                                </a>
+                            </li>
+                @endcanany
 
                 @canany(['rating-table', 'rating-add', 'rating-edit', 'rating-delete'])
                             <li class="nav-item">
