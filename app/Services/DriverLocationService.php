@@ -302,34 +302,5 @@ class DriverLocationService
         }
     }
     
-    /**
-     * Update order status in Firebase (helper method) not use
-     */
-    public function updateOrderStatus($orderId, $newStatus)
-    {
-        try {
-            $orderDoc = $this->firestore->database()
-                ->collection('orders')
-                ->document((string)$orderId);
-            
-            $orderDoc->update([
-                'status' => $newStatus,
-                'updated_at' => new \DateTime()
-            ]);
-            
-            \Log::info("Order {$orderId} status updated to {$newStatus} in Firebase");
-            
-            return [
-                'success' => true,
-                'message' => 'Order status updated successfully'
-            ];
-            
-        } catch (\Exception $e) {
-            \Log::error("Error updating order {$orderId} status in Firebase: " . $e->getMessage());
-            return [
-                'success' => false,
-                'message' => 'Failed to update order status: ' . $e->getMessage()
-            ];
-        }
-    }
+   
 }
