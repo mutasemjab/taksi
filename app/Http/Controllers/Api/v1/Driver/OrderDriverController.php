@@ -15,6 +15,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use App\Services\EnhancedFCMService;
 use App\Services\OrderPaymentService;
+use App\Services\OrderStatusService;
 use Illuminate\Support\Facades\Log;
 
 class OrderDriverController extends Controller
@@ -267,7 +268,7 @@ class OrderDriverController extends Controller
     
    
 
-    public function updateStatus(Request $request, $id)
+   public function updateStatus(Request $request, $id)
     {
         $driver = Auth::guard('driver-api')->user();
         $order = Order::with(['service', 'user', 'driver'])->where('id', $id)
@@ -278,7 +279,6 @@ class OrderDriverController extends Controller
             return $this->error_response('Order not found', null);
         }
         
-        // Define allowed status values using enum values
         $allowedStatuses = [
             OrderStatus::DriverGoToUser->value,
             OrderStatus::UserWithDriver->value, 
@@ -292,6 +292,7 @@ class OrderDriverController extends Controller
             'drop_name' => 'required_if:status,' . OrderStatus::waitingPayment->value,
             'drop_lat' => 'required_if:status,' . OrderStatus::waitingPayment->value,
             'drop_lng' => 'required_if:status,' . OrderStatus::waitingPayment->value,
+            'in_trip_waiting_minutes' => 'nullable|integer|min:0', // NEW: For traffic stops
         ]);
         
         if ($validator->fails()) {
@@ -301,8 +302,59 @@ class OrderDriverController extends Controller
         try {
             DB::beginTransaction();
             
+            $statusService = app(OrderStatusService::class);
             $currentStatus = $order->status;
             $newStatus = OrderStatus::from($request->status);
+            
+            // Record status change FIRST (this will set arrived_at if status is 'arrived')
+            $statusChange = $statusService->recordStatusChange(
+                $order, 
+                $newStatus->value, 
+                $driver->id, 
+                'driver'
+            );
+            
+            // ========== CALCULATE WAITING CHARGES WHEN MOVING FROM 'arrived' TO 'started' ==========
+            $waitingCharges = null;
+            if ($currentStatus === 'arrived' && $newStatus->value === 'started') {
+                if ($order->arrived_at && $order->service) {
+                    $arrivedAt = \Carbon\Carbon::parse($order->arrived_at);
+                    $now = now();
+                    
+                    // Get waiting configuration from service
+                    $freeWaitingMinutes = $order->service->free_waiting_minutes ?? 3;
+                    $chargePerMinute = $order->service->waiting_charge_per_minute ?? 0;
+                    
+                    $totalWaitingMinutes = $arrivedAt->diffInMinutes($now);
+                    
+                    // Calculate billable waiting minutes (after free period)
+                    $billableWaitingMinutes = max(0, $totalWaitingMinutes - $freeWaitingMinutes);
+                    $waitingChargesAmount = $billableWaitingMinutes * $chargePerMinute;
+                    
+                    $waitingCharges = [
+                        'total_waiting_minutes' => $totalWaitingMinutes,
+                        'free_waiting_minutes' => $freeWaitingMinutes,
+                        'billable_waiting_minutes' => $billableWaitingMinutes,
+                        'charge_per_minute' => $chargePerMinute,
+                        'waiting_charges' => round($waitingChargesAmount, 2)
+                    ];
+                    
+                    // Add waiting charges to order price
+                    $order->total_waiting_minutes = $totalWaitingMinutes;
+                    $order->waiting_charges = $waitingChargesAmount;
+                    $order->total_price_before_discount += $waitingChargesAmount;
+                    $order->total_price_after_discount += $waitingChargesAmount;
+                    
+                    Log::info("Order {$order->id}: Waiting charges applied at 'started' status", [
+                        'total_minutes' => $totalWaitingMinutes,
+                        'free_minutes' => $freeWaitingMinutes,
+                        'billable_minutes' => $billableWaitingMinutes,
+                        'charge_per_minute' => $chargePerMinute,
+                        'total_charges' => $waitingChargesAmount
+                    ]);
+                }
+            }
+            // ========== END WAITING CHARGES ==========
             
             // Track when trip starts
             if ($newStatus === OrderStatus::UserWithDriver && is_null($order->trip_started_at)) {
@@ -315,17 +367,28 @@ class OrderDriverController extends Controller
                 $order->drop_name = $request->input('drop_name');
                 $order->drop_lat = (float) $request->input('drop_lat');
                 $order->drop_lng = (float) $request->input('drop_lng');
+                
+                // ========== NEW: HANDLE IN-TRIP WAITING TIME FROM MOBILE ==========
+                if ($request->has('in_trip_waiting_minutes')) {
+                    $inTripWaitingMinutes = (int) $request->input('in_trip_waiting_minutes');
+                    $order->in_trip_waiting_minutes = $inTripWaitingMinutes;
+                }
+                // ========== END IN-TRIP WAITING ==========
+                
                 $pricingDetails = $this->orderPaymentService->calculateFinalPrice($order);
                 
                 if ($pricingDetails['price_updated']) {
-                    // Update the order with new pricing including recalculated discount
                     $order->total_price_before_discount = $pricingDetails['new_calculated_price'];
                     $order->discount_value = $pricingDetails['final_discount_value'];
                     $order->total_price_after_discount = $pricingDetails['final_price'];
                     $order->net_price_for_driver = $pricingDetails['net_price_for_driver'];
                     $order->commision_of_admin = $pricingDetails['admin_commission'];
                     
-                    // Log coupon recalculation if it happened
+                    // Save in-trip waiting charges if calculated
+                    if (isset($pricingDetails['in_trip_waiting_charges'])) {
+                        $order->in_trip_waiting_charges = $pricingDetails['in_trip_waiting_charges']['total_charges'];
+                    }
+                    
                     if ($pricingDetails['coupon_recalculated']) {
                         Log::info("Order {$order->id}: Coupon discount updated from {$pricingDetails['initial_discount']} to {$pricingDetails['final_discount_value']}");
                     }
@@ -337,12 +400,11 @@ class OrderDriverController extends Controller
                     $order->actual_trip_duration_minutes = $order->trip_started_at->diffInMinutes($tripCompletedAt);
                 }
                 
-                // Update status and save
                 $order->status = $newStatus;
                 $order->save();
             }
             
-            // Process payment when status is delivered using the service
+            // Process payment when status is delivered
             $paymentDetails = null;
             if ($newStatus === OrderStatus::Delivered) {
                 $result = $this->orderPaymentService->markAsDeliveredAndProcessPayment($order, $driver);
@@ -351,7 +413,7 @@ class OrderDriverController extends Controller
                     throw new \Exception($result['error']);
                 }
                 
-                $order = $result['order']; // Get updated order from service
+                $order = $result['order'];
                 $paymentDetails = $result['payment_details'];
             } else if ($newStatus !== OrderStatus::waitingPayment) {
                 // Update status for other cases
@@ -361,10 +423,9 @@ class OrderDriverController extends Controller
             
             DB::commit();
             
-            // Send notification to user about status change
+            // Send notifications
             EnhancedFCMService::sendOrderStatusToUser($id, $newStatus);
             
-            // Special case for arrival notification
             if ($newStatus === OrderStatus::Arrived) {
                 EnhancedFCMService::sendDriverArrivalNotification($id);
             }
@@ -378,7 +439,19 @@ class OrderDriverController extends Controller
                 'trip_started_at' => $order->trip_started_at,
                 'trip_completed_at' => $order->trip_completed_at,
                 'actual_duration_minutes' => $order->actual_trip_duration_minutes,
+                'status_change' => [
+                    'previous_status' => $statusChange['previous_status'],
+                    'new_status' => $newStatus->value,
+                    'duration_from_previous' => $statusChange['duration_minutes'],
+                    'changed_at' => $statusChange['changed_at']->format('Y-m-d H:i:s')
+                ]
             ];
+            
+            // Add waiting charges info if applicable
+            if ($waitingCharges) {
+                $responseData['waiting_charges_details'] = $waitingCharges;
+                $responseData['updated_total_price'] = $order->total_price_after_discount;
+            }
             
             if ($pricingDetails) {
                 $responseData['pricing_details'] = $pricingDetails;

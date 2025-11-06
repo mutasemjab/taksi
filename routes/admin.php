@@ -21,6 +21,7 @@ use App\Http\Controllers\Admin\BannerController;
 use App\Http\Controllers\Admin\ComplaintController;
 use App\Http\Controllers\Admin\DriverAlertAdminController;
 use App\Http\Controllers\Admin\RatingController;
+use App\Http\Controllers\Reports\OrderStatusReportController;
 use Mcamara\LaravelLocalization\Facades\LaravelLocalization;
 use Spatie\Permission\Models\Permission;
 /*
@@ -45,7 +46,16 @@ Route::group(['prefix' => LaravelLocalization::setLocale(), 'middleware' => ['lo
         Route::get('logout', [LoginController::class, 'logout'])->name('admin.logout');
 
 
-        // other route
+        // report route
+
+        Route::prefix('reports')->name('reports.')->group(function () {
+            Route::get('order-status-history', [OrderStatusReportController::class, 'index'])
+                ->name('order-status-history');
+            Route::get('order-status-history/{order}', [OrderStatusReportController::class, 'show'])
+                ->name('order-status-detail');
+            Route::get('order-status-export', [OrderStatusReportController::class, 'export'])
+                ->name('order-status-export');
+        });
 
 
         /*         start  update login admin                 */
@@ -130,6 +140,7 @@ Route::group(['prefix' => LaravelLocalization::setLocale(), 'middleware' => ['lo
 
         // functionloty routes
         Route::post('drivers/topUp/{id}', [DriverController::class, 'topUp'])->name('drivers.topUp');
+        Route::post('users/topUp/{id}', [UserController::class, 'topUp'])->name('users.topUp');
         Route::get('drivers/transactions/{id}', [DriverController::class, 'transactions'])->name('drivers.transactions');
         Route::post('/complaints/{complaint}/update-status', [ComplaintController::class, 'updateStatus'])
             ->name('complaints.update-status');

@@ -14,6 +14,7 @@ use App\Models\ParentStudent;
 use App\Services\OTPService;
 use App\Traits\Responses;
 use Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 
@@ -195,7 +196,7 @@ class AuthController extends Controller
     }
 
 
-   public function register(Request $request)
+    public function register(Request $request)
     {
         $userType = $request->user_type ?? 'user';
 
@@ -231,35 +232,111 @@ class AuthController extends Controller
             return $this->error_response('Validation error', $validator->errors());
         }
 
-        $userData = $request->only(['name', 'country_code', 'phone', 'email', 'fcm_token']);
-        $userData['balance'] = 0;
+        try {
+            DB::beginTransaction();
 
-        if ($request->hasFile('photo')) {
-            $userData['photo'] = uploadImage('assets/admin/uploads', $request->file('photo'));
-        }
+            $userData = $request->only(['name', 'country_code', 'phone', 'email', 'fcm_token']);
+            $userData['balance'] = 0;
 
-        if ($userType === 'driver') {
-            $userData['sos_phone'] = $request->sos_phone;
-            $userData['activate'] = 3;
-            if ($request->hasFile('photo_of_car')) $userData['photo_of_car'] = uploadImage('assets/admin/uploads', $request->file('photo_of_car'));
-            $userData = array_merge($userData, $request->only(['passenger_number','model','production_year','color','plate_number']));
-            $user = \App\Models\Driver::create($userData);
-
-            if ($request->has('option_ids') && is_array($request->option_ids)) {
-                $user->options()->attach($request->option_ids);
+            if ($request->hasFile('photo')) {
+                $userData['photo'] = uploadImage('assets/admin/uploads', $request->file('photo'));
             }
-        } else {
-            $userData['referral_code'] = $this->generateReferralCode();
-            $user = \App\Models\User::create($userData);
+
+            $welcomeBonus = 0;
+            $welcomeBonusApplied = false;
+
+            if ($userType === 'driver') {
+                // Get welcome bonus for new driver
+                $welcomeBonus = $this->getSettingValue('new_driver_register_add_balance', 0);
+                
+                $userData['sos_phone'] = $request->sos_phone;
+                $userData['activate'] = 3;
+                $userData['balance'] = $welcomeBonus; // Set initial balance
+                
+                if ($request->hasFile('photo_of_car')) {
+                    $userData['photo_of_car'] = uploadImage('assets/admin/uploads', $request->file('photo_of_car'));
+                }
+                
+                $userData = array_merge($userData, $request->only(['passenger_number', 'model', 'production_year', 'color', 'plate_number']));
+                $user = \App\Models\Driver::create($userData);
+
+                if ($request->has('option_ids') && is_array($request->option_ids)) {
+                    $user->options()->attach($request->option_ids);
+                }
+
+                // Create wallet transaction if welcome bonus > 0
+                if ($welcomeBonus > 0) {
+                    DB::table('wallet_transactions')->insert([
+                        'driver_id' => $user->id,
+                        'amount' => $welcomeBonus,
+                        'type_of_transaction' => 1, // addition
+                        'note' => 'Welcome bonus for new driver registration',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                    $welcomeBonusApplied = true;
+
+                }
+            } else {
+                // Get welcome bonus for new user
+                $welcomeBonus = $this->getSettingValue('new_user_register_add_balance', 0);
+                
+                $userData['referral_code'] = $this->generateReferralCode();
+                $userData['balance'] = $welcomeBonus; // Set initial balance
+                
+                $user = \App\Models\User::create($userData);
+
+                // Create wallet transaction if welcome bonus > 0
+                if ($welcomeBonus > 0) {
+                    DB::table('wallet_transactions')->insert([
+                        'user_id' => $user->id,
+                        'amount' => $welcomeBonus,
+                        'type_of_transaction' => 1, // addition
+                        'note' => 'Welcome bonus for new user registration',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                    $welcomeBonusApplied = true;
+
+                }
+            }
+
+            DB::commit();
+
+            $accessToken = $user->createToken('authToken')->accessToken;
+
+            $responseData = [
+                'token' => $accessToken,
+                'user' => $user,
+                'new_user' => true,
+            ];
+
+            // Add welcome bonus info to response if applied
+            if ($welcomeBonusApplied) {
+                $responseData['welcome_bonus'] = [
+                    'amount' => $welcomeBonus,
+                    'message' => $userType === 'driver' 
+                        ? "Welcome! You've received {$welcomeBonus} JD as a welcome bonus." 
+                        : "Welcome! You've received {$welcomeBonus} JD as a welcome bonus.",
+                    'current_balance' => $user->balance
+                ];
+            }
+
+            return $this->success_response('Registration successful', $responseData);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->error_response('Registration failed', $e->getMessage());
         }
+    }
 
-        $accessToken = $user->createToken('authToken')->accessToken;
-
-        return $this->success_response('Registration successful', [
-            'token' => $accessToken,
-            'user' => $user,
-            'new_user' => true,
-        ]);
+    /**
+     * Get setting value by key with default fallback
+     */
+    private function getSettingValue($key, $default = 0)
+    {
+        $setting = DB::table('settings')->where('key', $key)->first();
+        return $setting ? $setting->value : $default;
     }
 
     public function sendOtp(Request $request)

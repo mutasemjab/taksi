@@ -66,6 +66,10 @@ class ServiceController extends Controller
             'capacity' => 'required|integer|min:0',
             'waiting_time' => 'required|numeric|min:0',
             'cancellation_fee' => 'required|numeric|min:0',
+            // NEW: Waiting charges validation
+            'free_waiting_minutes' => 'required|integer|min:0',
+            'waiting_charge_per_minute' => 'required|numeric|min:0',
+            'waiting_charge_per_minute_when_order_active' => 'required|numeric|min:0',
         ]);
     
         if ($validator->fails()) {
@@ -140,6 +144,10 @@ class ServiceController extends Controller
             'capacity' => 'required|integer|min:0',
             'waiting_time' => 'required|numeric|min:0',
             'cancellation_fee' => 'required|numeric|min:0',
+            // NEW: Waiting charges validation
+            'free_waiting_minutes' => 'required|integer|min:0',
+            'waiting_charge_per_minute' => 'required|numeric|min:0',
+            'waiting_charge_per_minute_when_order_active' => 'required|numeric|min:0',
         ]);
 
         if ($validator->fails()) {

@@ -63,6 +63,15 @@ return new class extends Migration
             // Change status_payment to ENUM
             $table->enum('status_payment', ['pending', 'paid'])
                   ->default('pending');
+
+            /// وهو بستنى باليوزر عبين ما ينزله
+            $table->timestamp('arrived_at')->nullable();
+            $table->integer('total_waiting_minutes')->default(0);
+            $table->double('waiting_charges')->default(0);
+
+            // وهي الرحلة شغالة الوقت اللي وقف فيه
+            $table->integer('in_trip_waiting_minutes')->default(0)->after('waiting_charges');
+            $table->double('in_trip_waiting_charges')->default(0)->after('in_trip_waiting_minutes');
             $table->timestamps();
         });
     }

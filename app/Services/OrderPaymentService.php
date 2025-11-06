@@ -255,8 +255,10 @@ class OrderPaymentService
         ];
     }
 
+    
     /**
      * Calculate final price based on settings and trip duration
+     * Includes in-trip waiting charges when pricing method is "both" (3)
      */
     public function calculateFinalPrice($order)
     {
@@ -264,7 +266,7 @@ class OrderPaymentService
         $pricingMethod = $this->getPricingMethod();
 
         $pricingDetails = [
-            'pricing_method' => $pricingMethod === 1 ? 'time_based' : 'distance_based',
+            'pricing_method' => $this->getPricingMethodText($pricingMethod),
             'initial_estimated_price' => $order->total_price_before_discount,
             'initial_discount' => $order->discount_value,
             'price_updated' => false,
@@ -347,6 +349,34 @@ class OrderPaymentService
             ]);
         }
 
+        // ========== ADD IN-TRIP WAITING CHARGES (for traffic stops, etc.) ==========
+        // Only apply when pricing method is "both" (3) and mobile sent waiting minutes
+        if ($pricingMethod == 3 && $order->in_trip_waiting_minutes > 0) {
+            $inTripWaitingMinutes = $order->in_trip_waiting_minutes;
+            $chargePerMinute = $order->service->waiting_charge_per_minute_when_order_active ?? 0;
+            
+            $inTripWaitingCharges = $inTripWaitingMinutes * $chargePerMinute;
+            
+            $pricingDetails['in_trip_waiting_charges'] = [
+                'in_trip_waiting_minutes' => $inTripWaitingMinutes,
+                'charge_per_minute' => $chargePerMinute,
+                'total_charges' => round($inTripWaitingCharges, 2),
+                'description' => 'Charges for stopped time during trip (traffic, lights, etc.)'
+            ];
+            
+            // Add in-trip waiting charges to the calculated price
+            $newCalculatedPrice += $inTripWaitingCharges;
+            $pricingDetails['new_calculated_price'] = $newCalculatedPrice;
+            $pricingDetails['price_includes_in_trip_waiting'] = true;
+            
+            Log::info("Order {$order->id}: In-trip waiting charges calculated", [
+                'waiting_minutes' => $inTripWaitingMinutes,
+                'charge_per_minute' => $chargePerMinute,
+                'total_charges' => $inTripWaitingCharges
+            ]);
+        }
+        // ========== END IN-TRIP WAITING CHARGES ==========
+
         // Calculate final price after discount
         $finalPrice = $newCalculatedPrice - $discountValue;
 
@@ -364,6 +394,32 @@ class OrderPaymentService
         ]);
 
         return $pricingDetails;
+    }
+
+    /**
+     * Get pricing calculation method from settings
+     * 1 = time-based, 2 = distance-based, 3 = both
+     */
+    private function getPricingMethod()
+    {
+        return $this->getSettingValue('calculate_price_depend_on_time_or_distance_or_both', 2);
+    }
+
+    /**
+     * Get text representation of pricing method
+     */
+    private function getPricingMethodText($method)
+    {
+        switch ($method) {
+            case 1:
+                return 'time_based';
+            case 2:
+                return 'distance_based';
+            case 3:
+                return 'both_time_and_distance';
+            default:
+                return 'unknown';
+        }
     }
 
     /**
@@ -405,14 +461,7 @@ class OrderPaymentService
         return $setting ? $setting->value : $default;
     }
 
-    /**
-     * Get pricing calculation method from settings
-     * 1 = time-based, 2 = distance-based
-     */
-    private function getPricingMethod()
-    {
-        return $this->getSettingValue('calculate_price_depend_on_time_or_distance', 2);
-    }
+ 
 
     /**
      * Calculate admin commission and driver net price using service commission
