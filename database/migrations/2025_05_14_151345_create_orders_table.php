@@ -71,8 +71,8 @@ return new class extends Migration
             $table->double('waiting_charges')->default(0);
 
             // وهي الرحلة شغالة الوقت اللي وقف فيه
-            $table->integer('in_trip_waiting_minutes')->default(0)->after('waiting_charges');
-            $table->double('in_trip_waiting_charges')->default(0)->after('in_trip_waiting_minutes');
+            $table->integer('in_trip_waiting_minutes')->default(0);
+            $table->double('in_trip_waiting_charges')->default(0);
             $table->timestamps();
         });
     }
