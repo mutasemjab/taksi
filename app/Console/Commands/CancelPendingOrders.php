@@ -32,8 +32,8 @@ class CancelPendingOrders extends Command
         
         try {
             $this->firestore = new FirestoreClient([
-                'projectId' => config('services.firebase.project_id'),
-                'keyFilePath' => config('services.firebase.credentials'),
+                'projectId' => config('firebase.project_id'),
+                'keyFilePath' => config('firebase.credentials'),
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to initialize Firestore in CancelPendingOrders command: ' . $e->getMessage());
