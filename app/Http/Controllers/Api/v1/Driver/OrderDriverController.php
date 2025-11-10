@@ -363,10 +363,45 @@ class OrderDriverController extends Controller
 
             // Calculate pricing for waiting payment
             $pricingDetails = null;
-            if ($newStatus === OrderStatus::waitingPayment) {
+           if ($newStatus === OrderStatus::waitingPayment) {
                 $order->drop_name = $request->input('drop_name');
                 $order->drop_lat = (float) $request->input('drop_lat');
                 $order->drop_lng = (float) $request->input('drop_lng');
+                
+                // ========== RECALCULATE DISTANCE-BASED PRICE IF DROP LOCATION WAS JUST SET ==========
+                $pricingMethod = DB::table('settings')
+                    ->where('key', 'calculate_price_depend_on_time_or_distance_or_both')
+                    ->value('value') ?? 2;
+                
+                // If pricing method is distance-based (2) or both (3), recalculate the base price
+                if (in_array($pricingMethod, [2, 3]) && $order->pick_lat && $order->pick_lng) {
+                    // Calculate actual distance between pickup and drop-off
+                    $distance = $this->calculateDistance(
+                        $order->pick_lat, 
+                        $order->pick_lng, 
+                        $order->drop_lat, 
+                        $order->drop_lng
+                    );
+                    
+                    // Get pricing based on current time period
+                    $timePricing = $this->orderPaymentService->getTimePeriodPricing($order->service);
+                    $startPrice = $timePricing['start_price'];
+                    $pricePerKm = $timePricing['price_per_km'];
+                    
+                    // Recalculate price based on actual distance
+                    $distanceBasedPrice = ($distance * $pricePerKm) + $startPrice;
+                    
+                    // Update the order's base price before discount calculation
+                    $order->total_price_before_discount = $distanceBasedPrice;
+                    
+                    Log::info("Order {$order->id}: Distance-based price recalculated at waiting_payment", [
+                        'actual_distance_km' => $distance,
+                        'price_per_km' => $pricePerKm,
+                        'start_price' => $startPrice,
+                        'new_price' => $distanceBasedPrice
+                    ]);
+                }
+                // ========== END DISTANCE RECALCULATION ==========
                 
                 // ========== NEW: HANDLE IN-TRIP WAITING TIME FROM MOBILE ==========
                 if ($request->has('in_trip_waiting_minutes')) {
@@ -472,6 +507,25 @@ class OrderDriverController extends Controller
     }
 
     
+    /**
+     * Calculate distance between two coordinates in kilometers using Haversine formula
+     */
+    private function calculateDistance($lat1, $lon1, $lat2, $lon2)
+    {
+        $earthRadius = 6371; // Earth's radius in kilometers
+        
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+        
+        $a = sin($dLat/2) * sin($dLat/2) +
+            cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+            sin($dLon/2) * sin($dLon/2);
+        
+        $c = 2 * atan2(sqrt($a), sqrt(1-$a));
+        $distance = $earthRadius * $c;
+        
+        return round($distance, 2);
+    }
     
     public function acceptOrder(Request $request, $orderId)
     {
