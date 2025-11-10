@@ -243,7 +243,7 @@ class OrderPaymentService
     /**
      * Get appropriate pricing fields based on time of day
      */
-    private function getTimePeriodPricing($service, $dateTime = null)
+    public function getTimePeriodPricing($service, $dateTime = null)
     {
         $isEvening = $this->isEveningTime($dateTime);
         
