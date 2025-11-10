@@ -375,6 +375,12 @@ class OrderDriverController extends Controller
                 
                 // If pricing method is distance-based (2) or both (3), recalculate the base price
                 if (in_array($pricingMethod, [2, 3]) && $order->pick_lat && $order->pick_lng) {
+                     Log::info("Order {$order->id}: the lat and lng for order asoom", [
+                        'pick_lat' => $order->pick_lat,
+                        'pick_lng' => $order->pick_lng,
+                        'drop_lat' => $request->input('drop_lat'),
+                        'drop_lng' => $request->input('drop_lng'),
+                    ]);
                     // Calculate actual distance between pickup and drop-off
                     $distance = $this->calculateDistance(
                         $order->pick_lat, 
