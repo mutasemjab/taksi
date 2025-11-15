@@ -525,23 +525,23 @@ class OrderDriverController extends Controller
     {
         $service = $order->service;
         
-        // Step 1: Start with the live fare from mobile (this is the base distance fare)
+        // Step 1: Start with the live fare from mobile 
+        // This ALREADY includes: base distance fare + in-trip waiting charges
         $baseFare = $liveFare;
 
         // Step 2: Calculate driver waiting charges (when driver arrived but user hasn't started trip yet)
+        // This is the ONLY charge we add on backend
         $driverWaitingDetails = $this->calculateDriverWaitingCharges($order);
         $driverWaitingCharges = $driverWaitingDetails['waiting_charges'];
 
-        // Step 3: Calculate in-trip waiting charges (traffic stops, red lights, etc.)
-        $inTripWaitingCharges = 0;
+        // Step 3: Calculate in-trip waiting charges FOR RECORD ONLY (not added to price)
+        // Mobile already included this in live_fare, we just store it for transparency
         $chargePerMinuteInTrip = $service->waiting_charge_per_minute_when_order_active ?? 0;
-        
-        if ($inTripWaitingMinutes > 0 && $chargePerMinuteInTrip > 0) {
-            $inTripWaitingCharges = $inTripWaitingMinutes * $chargePerMinuteInTrip;
-        }
+        $inTripWaitingCharges = $inTripWaitingMinutes * $chargePerMinuteInTrip;
 
         // Step 4: Calculate total price before discount
-        $totalBeforeDiscount = $baseFare + $driverWaitingCharges + $inTripWaitingCharges;
+        // Only add driver waiting charges (in-trip waiting is already in liveFare)
+        $totalBeforeDiscount = $baseFare + $driverWaitingCharges;
 
         // Step 5: Apply coupon discount if applicable
         $discountDetails = $this->applyCouponDiscount($order, $totalBeforeDiscount);
@@ -559,7 +559,8 @@ class OrderDriverController extends Controller
             'driver_waiting_details' => $driverWaitingDetails,
             'in_trip_waiting_minutes' => $inTripWaitingMinutes,
             'in_trip_waiting_charge_per_minute' => $chargePerMinuteInTrip,
-            'in_trip_waiting_charges' => round($inTripWaitingCharges, 2),
+            'in_trip_waiting_charges' => round($inTripWaitingCharges, 2), // For record only
+            'in_trip_waiting_note' => 'Already included in live_fare from mobile',
             'total_before_discount' => round($totalBeforeDiscount, 2),
             'coupon_applied' => $discountDetails['coupon_applied'],
             'coupon_details' => $discountDetails['coupon_details'],
@@ -570,12 +571,12 @@ class OrderDriverController extends Controller
             'admin_commission' => round($adminCommission, 2),
             'net_price_for_driver' => round($netPriceForDriver, 2),
             'price_breakdown' => [
-                'base_fare' => round($baseFare, 2),
-                'driver_waiting_charges' => round($driverWaitingCharges, 2),
-                'in_trip_waiting_charges' => round($inTripWaitingCharges, 2),
+                'live_fare_from_mobile' => round($baseFare, 2),
+                'driver_waiting_charges_added' => round($driverWaitingCharges, 2),
                 'subtotal' => round($totalBeforeDiscount, 2),
                 'discount' => round($discountValue, 2),
-                'total' => round($finalPrice, 2)
+                'total' => round($finalPrice, 2),
+                'note' => 'In-trip waiting charges are already included in live_fare from mobile'
             ]
         ];
     }
