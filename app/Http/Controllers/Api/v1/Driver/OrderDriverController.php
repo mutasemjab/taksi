@@ -408,7 +408,8 @@ class OrderDriverController extends Controller
                 // Get live data from mobile
                 $liveFare = (float) $request->input('live_fare');
                 $liveDistance = (float) $request->input('live_distance');
-                $inTripWaitingMinutes = (int) $request->input('waiting_time');
+               $inTripWaitingMinutes = (int) ($request->input('waiting_time') / 60);
+
 
                 // Store the live distance and in-trip waiting time
                 $order->live_distance = $liveDistance;
