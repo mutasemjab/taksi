@@ -14,7 +14,7 @@ class OrderPaymentService
     /**
      * Update order status to delivered and process payment
      */
-    public function markAsDeliveredAndProcessPayment(Order $order, $driver = null)
+   public function markAsDeliveredAndProcessPayment(Order $order, $driver = null)
     {
         try {
             DB::beginTransaction();
@@ -229,6 +229,36 @@ class OrderPaymentService
     }
 
     /**
+     * Get service commission details (PUBLIC method for external use)
+     */
+    public function getServiceCommission($serviceId, $totalPrice)
+    {
+        $service = DB::table('services')->where('id', $serviceId)->first();
+
+        if (!$service) {
+            throw new \Exception("Service not found with ID: {$serviceId}");
+        }
+
+        $commissionValue = $service->admin_commision;
+        $commissionType = $service->type_of_commision;
+
+        if ($commissionType == 1) {
+            // Fixed commission
+            $adminCommission = $commissionValue;
+        } else {
+            // Percentage commission
+            $adminCommission = ($totalPrice * $commissionValue) / 100;
+        }
+
+        return [
+            'commission_value' => $commissionValue,
+            'commission_type' => $commissionType,
+            'type_text' => $commissionType == 1 ? 'fixed' : 'percentage',
+            'admin_commission' => $adminCommission
+        ];
+    }
+
+    /**
      * Determine if current time is morning or evening
      * Morning: before 18:00 (6 PM)
      * Evening: 18:00 (6 PM) and after
@@ -422,35 +452,6 @@ class OrderPaymentService
         }
     }
 
-    /**
-     * Get service commission details
-     */
-    private function getServiceCommission($serviceId, $totalPrice)
-    {
-        $service = DB::table('services')->where('id', $serviceId)->first();
-
-        if (!$service) {
-            throw new \Exception("Service not found with ID: {$serviceId}");
-        }
-
-        $commissionValue = $service->admin_commision;
-        $commissionType = $service->type_of_commision;
-
-        if ($commissionType == 1) {
-            // Fixed commission
-            $adminCommission = $commissionValue;
-        } else {
-            // Percentage commission
-            $adminCommission = ($totalPrice * $commissionValue) / 100;
-        }
-
-        return [
-            'commission_value' => $commissionValue,
-            'commission_type' => $commissionType,
-            'type_text' => $commissionType == 1 ? 'fixed' : 'percentage',
-            'admin_commission' => $adminCommission
-        ];
-    }
 
     /**
      * Get setting value by key with default fallback

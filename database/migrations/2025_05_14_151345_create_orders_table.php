@@ -42,6 +42,7 @@ return new class extends Migration
             $table->timestamp('trip_started_at')->nullable();
             $table->timestamp('trip_completed_at')->nullable();
             $table->double('actual_trip_duration_minutes')->nullable();
+            $table->double('live_distance')->default(0);
 
             $table->enum('status', [
                 'pending',
