@@ -114,12 +114,7 @@
                         </div>
                     </div>
 
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label for="price_of_real_one_minute_morning">{{ __('messages.price_of_real_one_minute') }} ({{ __('messages.Morning') }}) <span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" class="form-control" id="price_of_real_one_minute_morning" name="price_of_real_one_minute_morning" value="{{ old('price_of_real_one_minute_morning', $service->price_of_real_one_minute_morning) }}" required min="0">
-                        </div>
-                    </div>
+                
                 </div>
 
                 <hr>
@@ -141,12 +136,7 @@
                         </div>
                     </div>
 
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label for="price_of_real_one_minute_evening">{{ __('messages.price_of_real_one_minute') }} ({{ __('messages.Evening') }}) <span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" class="form-control" id="price_of_real_one_minute_evening" name="price_of_real_one_minute_evening" value="{{ old('price_of_real_one_minute_evening', $service->price_of_real_one_minute_evening) }}" required min="0">
-                        </div>
-                    </div>
+                    
                 </div>
                 
                 <hr>

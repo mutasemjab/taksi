@@ -29,8 +29,6 @@ return new class extends Migration
             $table->integer('capacity')->default(0);
             $table->double('waiting_time')->default(0);
             $table->double('cancellation_fee')->default(0);
-            $table->double('price_of_real_one_minute_morning')->default(0);
-            $table->double('price_of_real_one_minute_evening')->default(0);
             // الاعمدة المسؤولة عن انتظار السائق للراكب لحين نزوله
             $table->integer('free_waiting_minutes')->default(3);
             $table->double('waiting_charge_per_minute')->default(0);

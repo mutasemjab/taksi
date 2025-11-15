@@ -281,7 +281,6 @@ class OrderPaymentService
             'period' => $isEvening ? 'evening' : 'morning',
             'start_price' => $isEvening ? $service->start_price_evening : $service->start_price_morning,
             'price_per_km' => $isEvening ? $service->price_per_km_evening : $service->price_per_km_morning,
-            'price_per_minute' => $isEvening ? $service->price_of_real_one_minute_evening : $service->price_of_real_one_minute_morning,
         ];
     }
 
