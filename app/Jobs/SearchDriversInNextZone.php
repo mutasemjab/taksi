@@ -234,7 +234,11 @@ class SearchDriversInNextZone implements ShouldQueue
         $driversWithLocations = [];
         
         try {
-            $firestore = app(\Google\Cloud\Firestore\FirestoreClient::class);
+            $reflection = new \ReflectionClass($driverLocationService);
+            $property = $reflection->getProperty('firestore');
+            $property->setAccessible(true);
+            $firestore = $property->getValue($driverLocationService);
+            
             $collection = $firestore->database()->collection('drivers');
             
             foreach ($driverIds as $driverId) {
