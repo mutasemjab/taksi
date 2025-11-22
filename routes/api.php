@@ -154,3 +154,6 @@ Route::group(['prefix' => 'v1/driver'], function () {
         Route::post('/driverAlerts', [AlertDriverController::class, 'store']); // Create alert
     });
 });
+
+Route::post('/internal/update-order-radius', [\App\Http\Controllers\Api\v1\User\OrderController::class, 'updateOrderRadius'])
+    ->middleware('throttle:60,1');
