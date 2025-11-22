@@ -31,21 +31,16 @@ class SearchDriversInNextZone implements ShouldQueue
         $this->delay(now()->addSeconds(30));
     }
 
-    /**
-     * Execute - NO dependencies, call service via HTTP or artisan command
-     */
-    public function handle()
+    public function handle()  // ✅ NO parameters!
     {
         try {
-            // Check if order still pending
             $order = Order::find($this->orderId);
             
             if (!$order || $order->status != OrderStatus::Pending) {
-                \Log::info("Order {$this->orderId} not pending. Stopping search.");
+                \Log::info("Order {$this->orderId} not pending. Stopping.");
                 return;
             }
             
-            // Get settings
             $initialRadius = \DB::table('settings')
                 ->where('key', 'find_drivers_in_radius')
                 ->value('value') ?? 5;
@@ -57,19 +52,29 @@ class SearchDriversInNextZone implements ShouldQueue
             $nextRadius = $this->currentRadius + $initialRadius;
             
             if ($nextRadius > $maximumRadius) {
-                \Log::info("Reached maximum radius ({$maximumRadius}km) for order {$this->orderId}.");
+                \Log::info("Max radius reached for order {$this->orderId}");
                 return;
             }
             
-            \Log::info("Triggering search for {$nextRadius}km zone for order {$this->orderId}");
+            \Log::info("Expanding search to {$nextRadius}km for order {$this->orderId}");
             
-            // ✅ Call artisan command to trigger search (runs in web context, has gRPC)
-            \Artisan::call('orders:expand-search', [
-                'order_id' => $this->orderId,
-                'radius' => $nextRadius,
-            ]);
+            // ✅ Use app() to resolve service (creates Firestore only when needed)
+            $driverLocationService = app(\App\Services\DriverLocationService::class);
             
-            // Schedule next zone
+            $result = $driverLocationService->findAndStoreOrderInFirebase(
+                $this->userLat,
+                $this->userLng,
+                $this->orderId,
+                $this->serviceId,
+                $nextRadius * 1000, // Convert to meters
+                OrderStatus::Pending->value
+            );
+            
+            if ($result['success']) {
+                \Log::info("Found {$result['drivers_found']} drivers in {$nextRadius}km for order {$this->orderId}");
+            }
+            
+            // Schedule next expansion
             if ($nextRadius < $maximumRadius) {
                 SearchDriversInNextZone::dispatch(
                     $this->orderId,
