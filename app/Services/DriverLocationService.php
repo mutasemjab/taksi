@@ -16,9 +16,17 @@ class DriverLocationService
 {
     protected $firestore;
     
-    public function __construct(Firestore $firestore)
+    public function __construct() // ✅ No dependency
     {
-        $this->firestore = $firestore;
+        // Empty
+    }
+
+    private function getFirestore() // ✅ Lazy-load only when needed
+    {
+        if (!$this->firestore) {
+            $this->firestore = app(Firestore::class);
+        }
+        return $this->firestore;
     }
     
     /**
@@ -431,11 +439,15 @@ public function searchAndUpdateFirebase($userLat, $userLng, $orderId, $serviceId
                 'firebase_updated_at' => new \DateTime(),
             ];
             
-            // Write to Firebase ride_requests collection
-            $ordersCollection = $this->firestore->database()->collection('ride_requests');
-            $ordersCollection->document((string)$orderId)->set($orderData);
+   
             
             \Log::info("Complete order data for order {$orderId} written to Firebase with " . count($driverIDs) . " available drivers within {$searchRadius}km for service {$serviceId}");
+            
+            $firestore = $this->getFirestore();
+            $ordersCollection = $firestore->database()->collection('ride_requests');
+            $ordersCollection->document((string)$orderId)->set($orderData);
+            
+            return ['success' => true, 'message' => 'Updated'];
             
             return [
                 'success' => true,
