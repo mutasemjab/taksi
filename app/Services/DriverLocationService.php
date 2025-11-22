@@ -140,6 +140,47 @@ class DriverLocationService
     }
     
     /**
+ * Search for drivers in specific radius and update Firebase
+ */
+public function searchAndUpdateFirebase($userLat, $userLng, $orderId, $serviceId, $radius, $orderStatus)
+{
+    try {
+        // Get available drivers
+        $availableDriverIds = $this->getAvailableDriversForService($serviceId);
+        
+        if (empty($availableDriverIds)) {
+            return ['success' => false, 'drivers_found' => 0];
+        }
+        
+        // Get locations
+        $driversWithLocations = $this->getDriverLocationsFromFirestore($availableDriverIds);
+        
+        if (empty($driversWithLocations)) {
+            return ['success' => false, 'drivers_found' => 0];
+        }
+        
+        // Sort by distance
+        $sortedDrivers = $this->sortDriversByDistance($driversWithLocations, $userLat, $userLng, $radius);
+        
+        if (empty($sortedDrivers)) {
+            return ['success' => false, 'drivers_found' => 0];
+        }
+        
+        // Update Firebase
+        $firebaseResult = $this->writeOrderToFirebase($orderId, $sortedDrivers, $serviceId, $orderStatus, $radius);
+        
+        return [
+            'success' => $firebaseResult['success'],
+            'drivers_found' => count($sortedDrivers),
+        ];
+        
+    } catch (\Exception $e) {
+        \Log::error("Error in searchAndUpdateFirebase: " . $e->getMessage());
+        return ['success' => false, 'drivers_found' => 0];
+    }
+}
+
+    /**
      * Get the next radius zone
      */
     private function getNextRadius($currentRadius, $radiusZones, $maximumRadius)
