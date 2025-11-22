@@ -18,15 +18,16 @@ class FirebaseServiceProvider extends ServiceProvider
                 throw new \Exception("Firebase credentials file not found at: $credentialsPath");
             }
 
-            // Create factory with service account
-            $factory = (new Factory)
-                ->withServiceAccount(base_path($credentialsPath));
-            
-            // ✅ ADD THIS LINE - Use database instead of firestore
-            return $factory->withFirestoreDatabase()->createFirestore();
+            // ✅ Extract project ID from credentials file
+            $credentials = json_decode(file_get_contents(base_path($credentialsPath)), true);
+            $projectId = $credentials['project_id'] ?? config('firebase.project_id');
+
+            return (new Factory)
+                ->withServiceAccount(base_path($credentialsPath))
+                ->withProjectId($projectId)  // ✅ ADD THIS LINE
+                ->createFirestore();
         });
     }
-
 
     public function boot(): void
     {
