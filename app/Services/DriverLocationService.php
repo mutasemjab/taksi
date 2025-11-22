@@ -147,46 +147,7 @@ class DriverLocationService
         }
     }
     
-    /**
- * Search for drivers in specific radius and update Firebase
- */
-public function searchAndUpdateFirebase($userLat, $userLng, $orderId, $serviceId, $radius, $orderStatus)
-{
-    try {
-        // Get available drivers
-        $availableDriverIds = $this->getAvailableDriversForService($serviceId);
-        
-        if (empty($availableDriverIds)) {
-            return ['success' => false, 'drivers_found' => 0];
-        }
-        
-        // Get locations
-        $driversWithLocations = $this->getDriverLocationsFromFirestore($availableDriverIds);
-        
-        if (empty($driversWithLocations)) {
-            return ['success' => false, 'drivers_found' => 0];
-        }
-        
-        // Sort by distance
-        $sortedDrivers = $this->sortDriversByDistance($driversWithLocations, $userLat, $userLng, $radius);
-        
-        if (empty($sortedDrivers)) {
-            return ['success' => false, 'drivers_found' => 0];
-        }
-        
-        // Update Firebase
-        $firebaseResult = $this->writeOrderToFirebase($orderId, $sortedDrivers, $serviceId, $orderStatus, $radius);
-        
-        return [
-            'success' => $firebaseResult['success'],
-            'drivers_found' => count($sortedDrivers),
-        ];
-        
-    } catch (\Exception $e) {
-        \Log::error("Error in searchAndUpdateFirebase: " . $e->getMessage());
-        return ['success' => false, 'drivers_found' => 0];
-    }
-}
+  
 
     /**
      * Get the next radius zone
@@ -441,22 +402,19 @@ public function searchAndUpdateFirebase($userLat, $userLng, $orderId, $serviceId
                 'firebase_updated_at' => new \DateTime(),
             ];
             
-   
-            
-            \Log::info("Complete order data for order {$orderId} written to Firebase with " . count($driverIDs) . " available drivers within {$searchRadius}km for service {$serviceId}");
-            
+               
             $firestore = $this->getFirestore();
             $ordersCollection = $firestore->database()->collection('ride_requests');
             $ordersCollection->document((string)$orderId)->set($orderData);
-            
-            return ['success' => true, 'message' => 'Updated'];
 
+            \Log::info("Complete order data for order {$orderId} written to Firebase with " . count($driverIDs) . " available drivers within {$searchRadius}km for service {$serviceId}");
+
+            // ✅ Only ONE return
             return [
                 'success' => true,
                 'message' => 'Complete order data successfully written to Firebase',
                 'drivers_count' => count($driverIDs),
                 'search_radius' => $searchRadius,
-                'order_data' => $orderData // Optional: return the data for debugging
             ];
             
         } catch (\Exception $e) {

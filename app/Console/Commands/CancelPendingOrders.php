@@ -66,35 +66,37 @@ class CancelPendingOrders extends Command
         $failCount = 0;
 
         foreach ($pendingOrders as $order) {
-            try {
-                // Update order status to cancel_cron_job
-                $order->status = OrderStatus::CancelCronJob;
-                $order->reason_for_cancel = "Order automatically cancelled after being pending for {$hoursThreshold} hour(s) without driver acceptance.";
-                $order->save();
+        try {
+            // ✅ Use ->value to get the string value
+            $order->status = OrderStatus::CancelCronJob->value;
+            $order->reason_for_cancel = "Order automatically cancelled after being pending for {$hoursThreshold} hour(s) without driver acceptance.";
+            $order->save();
 
-                // Remove from Firestore
+            // Try to remove from Firestore (will fail silently if Firestore not available)
+            if ($this->firestore) {
                 $this->removeOrderFromFirestore($order->id);
-
-                $successCount++;
-                $this->info("✓ Order #{$order->id} cancelled successfully.");
-                
-                Log::info("Order #{$order->id} automatically cancelled by cron job", [
-                    'order_id' => $order->id,
-                    'user_id' => $order->user_id,
-                    'created_at' => $order->created_at,
-                    'hours_pending' => $order->created_at->diffInHours(now())
-                ]);
-
-            } catch (\Exception $e) {
-                $failCount++;
-                $this->error("✗ Failed to cancel order #{$order->id}: " . $e->getMessage());
-                
-                Log::error("Failed to cancel order #{$order->id} in cron job", [
-                    'order_id' => $order->id,
-                    'error' => $e->getMessage()
-                ]);
             }
+
+            $successCount++;
+            $this->info("✓ Order #{$order->id} cancelled successfully.");
+            
+            Log::info("Order #{$order->id} automatically cancelled by cron job", [
+                'order_id' => $order->id,
+                'user_id' => $order->user_id,
+                'created_at' => $order->created_at,
+                'hours_pending' => $order->created_at->diffInHours(now())
+            ]);
+
+        } catch (\Exception $e) {
+            $failCount++;
+            $this->error("✗ Failed to cancel order #{$order->id}: " . $e->getMessage());
+            
+            Log::error("Failed to cancel order #{$order->id} in cron job", [
+                'order_id' => $order->id,
+                'error' => $e->getMessage()
+            ]);
         }
+    }
 
         $this->info("\n=== Summary ===");
         $this->info("Total orders processed: {$pendingOrders->count()}");
