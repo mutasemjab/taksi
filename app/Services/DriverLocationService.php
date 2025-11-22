@@ -265,7 +265,9 @@ public function searchAndUpdateFirebase($userLat, $userLng, $orderId, $serviceId
         $driversWithLocations = [];
         
         try {
-            $collection = $this->firestore->database()->collection('drivers');
+            // ✅ Use the lazy-loaded method
+            $firestore = $this->getFirestore();
+            $collection = $firestore->database()->collection('drivers');
             
             foreach ($driverIds as $driverId) {
                 $document = $collection->document((string)$driverId)->snapshot();
@@ -448,7 +450,7 @@ public function searchAndUpdateFirebase($userLat, $userLng, $orderId, $serviceId
             $ordersCollection->document((string)$orderId)->set($orderData);
             
             return ['success' => true, 'message' => 'Updated'];
-            
+
             return [
                 'success' => true,
                 'message' => 'Complete order data successfully written to Firebase',
