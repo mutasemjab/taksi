@@ -11,6 +11,7 @@ use App\Services\DriverLocationService;
 use App\Models\Order;
 use App\Models\Driver;
 use App\Enums\OrderStatus;
+use Kreait\Firebase\Firestore;
 
 class SearchDriversInNextZone implements ShouldQueue
 {
@@ -22,9 +23,6 @@ class SearchDriversInNextZone implements ShouldQueue
     protected $userLat;
     protected $userLng;
 
-    /**
-     * Create a new job instance.
-     */
     public function __construct($orderId, $currentRadius, $serviceId, $userLat, $userLng)
     {
         $this->orderId = $orderId;
@@ -33,17 +31,15 @@ class SearchDriversInNextZone implements ShouldQueue
         $this->userLat = $userLat;
         $this->userLng = $userLng;
         
-        // Delay this job by 30 seconds
         $this->delay(now()->addSeconds(30));
     }
 
     /**
-     * Execute the job.
+     * Execute the job - Inject Firestore from service container
      */
-    public function handle(DriverLocationService $driverLocationService)
+    public function handle(Firestore $firestore)
     {
         try {
-            // Check if order still exists and is pending
             $order = Order::find($this->orderId);
             
             if (!$order) {
@@ -51,13 +47,11 @@ class SearchDriversInNextZone implements ShouldQueue
                 return;
             }
             
-            // If order is no longer pending (accepted by driver), stop searching
             if ($order->status != OrderStatus::Pending) {
                 \Log::info("Order {$this->orderId} is no longer pending (status: {$order->status->value}). Stopping driver search.");
                 return;
             }
             
-            // Get radius settings
             $initialRadius = \DB::table('settings')
                 ->where('key', 'find_drivers_in_radius')
                 ->value('value') ?? 5;
@@ -66,41 +60,29 @@ class SearchDriversInNextZone implements ShouldQueue
                 ->where('key', 'maximum_radius_to_find_drivers')
                 ->value('value') ?? 20;
             
-            // Calculate next radius
             $nextRadius = $this->currentRadius + $initialRadius;
             
-            // If we've reached maximum radius, stop
             if ($nextRadius > $maximumRadius) {
                 \Log::info("Reached maximum search radius ({$maximumRadius}km) for order {$this->orderId}. No drivers found.");
-                
-                // Optional: Update order status or notify user
-                // $order->update(['status' => OrderStatus::CancelCronJob]);
-                
                 return;
             }
             
             \Log::info("Searching for drivers in next zone ({$nextRadius}km) for order {$this->orderId} after 30-second wait");
             
-            // Search in next radius zone
-            $this->searchInRadiusZone($driverLocationService, $nextRadius, $maximumRadius, $initialRadius);
+            $this->searchInRadiusZone($firestore, $nextRadius, $maximumRadius, $initialRadius);
             
         } catch (\Exception $e) {
             \Log::error("Error in SearchDriversInNextZone job for order {$this->orderId}: " . $e->getMessage());
         }
     }
     
-    /**
-     * Search for drivers in specific radius zone
-     */
-    private function searchInRadiusZone($driverLocationService, $currentRadius, $maximumRadius, $initialRadius)
+    private function searchInRadiusZone($firestore, $currentRadius, $maximumRadius, $initialRadius)
     {
-        // Get available drivers with STRICT CRITERIA
         $availableDriverIds = $this->getAvailableDriversForService($this->serviceId);
         
         if (empty($availableDriverIds)) {
             \Log::info("No available drivers for service {$this->serviceId} in {$currentRadius}km zone");
             
-            // Continue to next zone if not at maximum
             if ($currentRadius < $maximumRadius) {
                 SearchDriversInNextZone::dispatch(
                     $this->orderId,
@@ -115,13 +97,12 @@ class SearchDriversInNextZone implements ShouldQueue
         
         \Log::info("Found " . count($availableDriverIds) . " available drivers for service {$this->serviceId}");
         
-        // ✅ USE SERVICE METHOD - No need to recreate Firestore
-        $driversWithLocations = $this->getDriverLocationsViaService($driverLocationService, $availableDriverIds);
+        // Get locations using injected Firestore
+        $driversWithLocations = $this->getDriverLocations($firestore, $availableDriverIds);
         
         if (empty($driversWithLocations)) {
             \Log::info("No drivers with active locations found for {$currentRadius}km zone");
             
-            // Continue to next zone if not at maximum
             if ($currentRadius < $maximumRadius) {
                 SearchDriversInNextZone::dispatch(
                     $this->orderId,
@@ -134,15 +115,13 @@ class SearchDriversInNextZone implements ShouldQueue
             return;
         }
         
-        // Sort drivers by distance for current radius
         $sortedDrivers = $this->sortDriversByDistance($driversWithLocations, $this->userLat, $this->userLng, $currentRadius);
         
         if (!empty($sortedDrivers)) {
             \Log::info("Found " . count($sortedDrivers) . " drivers within {$currentRadius}km for order {$this->orderId}");
             
-            // ✅ USE SERVICE METHOD - No need to recreate Firestore
-            $firebaseResult = $this->writeOrderViaService(
-                $driverLocationService,
+            $firebaseResult = $this->writeOrderToFirebase(
+                $firestore,
                 $this->orderId, 
                 $sortedDrivers, 
                 $this->serviceId, 
@@ -153,7 +132,6 @@ class SearchDriversInNextZone implements ShouldQueue
             if ($firebaseResult['success']) {
                 \Log::info("Successfully updated Firebase with drivers in {$currentRadius}km zone for order {$this->orderId}");
                 
-                // Schedule next search if not at maximum radius
                 if ($currentRadius < $maximumRadius) {
                     SearchDriversInNextZone::dispatch(
                         $this->orderId,
@@ -167,7 +145,6 @@ class SearchDriversInNextZone implements ShouldQueue
         } else {
             \Log::info("No drivers found within {$currentRadius}km for order {$this->orderId}");
             
-            // Continue to next zone if not at maximum
             if ($currentRadius < $maximumRadius) {
                 SearchDriversInNextZone::dispatch(
                     $this->orderId,
@@ -180,66 +157,43 @@ class SearchDriversInNextZone implements ShouldQueue
         }
     }
     
-    /**
-     * Get available drivers for service with STRICT AVAILABILITY CHECKS
-     * 
-     * CHECKS:
-     * ======
-     * 1. Driver status = 1 (online)
-     * 2. Driver activate = 1 (active account)
-     * 3. Driver balance >= minimum required
-     * 4. Driver NOT in orders with status: pending, accepted, on_the_way, started, arrived
-     * 5. Driver has the service assigned with status = 1 in driver_services
-     */
     private function getAvailableDriversForService($serviceId)
     {
         $minWalletBalance = \DB::table('settings')
             ->where('key', 'minimum_money_in_wallet_driver_to_get_order')
             ->value('value') ?? 0;
         
-        return Driver::where('status', 1) // Must be online
-            ->where('activate', 1) // Must be active
-            ->where('balance', '>=', $minWalletBalance) // Must have sufficient balance
-            
-            // Exclude drivers with active orders (ALL busy statuses)
+        return Driver::where('status', 1)
+            ->where('activate', 1)
+            ->where('balance', '>=', $minWalletBalance)
             ->whereNotIn('id', function($query) {
                 $query->select('driver_id')
                     ->from('orders')
                     ->whereIn('status', [
-                        'pending',      // OrderStatus::Pending
-                        'accepted',     // OrderStatus::DriverAccepted
-                        'on_the_way',   // OrderStatus::DriverGoToUser
-                        'started',      // OrderStatus::UserWithDriver
-                        'arrived'       // OrderStatus::Arrived
+                        'pending',
+                        'accepted',
+                        'on_the_way',
+                        'started',
+                        'arrived'
                     ])
                     ->whereNotNull('driver_id');
             })
-            
-            // Must have this service AND it must be active
             ->whereHas('services', function($query) use ($serviceId) {
                 $query->where('service_id', $serviceId)
-                      ->where('driver_services.status', 1); // Service must be active
+                      ->where('driver_services.status', 1);
             })
             ->pluck('id')
             ->toArray();
     }
     
     /**
-     * Get driver locations using the service's Firestore instance
-     * This avoids gRPC errors by using the already-configured Firestore
+     * Get driver locations using injected Firestore
      */
-    private function getDriverLocationsViaService($driverLocationService, array $driverIds)
+    private function getDriverLocations($firestore, array $driverIds)
     {
         $driversWithLocations = [];
         
         try {
-            // Use reflection to access the service's firestore property
-            $reflection = new \ReflectionClass($driverLocationService);
-            $property = $reflection->getProperty('firestore');
-            $property->setAccessible(true);
-            $firestore = $property->getValue($driverLocationService);
-            
-            // Now use the service's firestore instance
             $collection = $firestore->database()->collection('drivers');
             
             foreach ($driverIds as $driverId) {
@@ -271,9 +225,6 @@ class SearchDriversInNextZone implements ShouldQueue
         return $driversWithLocations;
     }
     
-    /**
-     * Sort drivers by distance
-     */
     private function sortDriversByDistance(array $drivers, $userLat, $userLng, $maxRadius)
     {
         $driversWithDistance = [];
@@ -299,9 +250,6 @@ class SearchDriversInNextZone implements ShouldQueue
         return $driversWithDistance;
     }
     
-    /**
-     * Calculate distance using Haversine formula
-     */
     private function calculateDistance($lat1, $lng1, $lat2, $lng2)
     {
         $earthRadius = 6371;
@@ -320,10 +268,9 @@ class SearchDriversInNextZone implements ShouldQueue
     }
     
     /**
-     * Write order to Firebase using the service's Firestore instance
-     * This avoids gRPC errors by using the already-configured Firestore
+     * Write to Firebase using injected Firestore
      */
-    private function writeOrderViaService($driverLocationService, $orderId, array $drivers, $serviceId, $orderStatus, $searchRadius)
+    private function writeOrderToFirebase($firestore, $orderId, array $drivers, $serviceId, $orderStatus, $searchRadius)
     {
         try {
             $order = Order::with(['user', 'service'])->find($orderId);
@@ -387,12 +334,7 @@ class SearchDriversInNextZone implements ShouldQueue
                 'firebase_updated_at' => new \DateTime(),
             ];
             
-            // ✅ Use the service's Firestore instance via reflection
-            $reflection = new \ReflectionClass($driverLocationService);
-            $property = $reflection->getProperty('firestore');
-            $property->setAccessible(true);
-            $firestore = $property->getValue($driverLocationService);
-            
+            // Use injected Firestore directly
             $ordersCollection = $firestore->database()->collection('ride_requests');
             $ordersCollection->document((string)$orderId)->set($orderData);
             
