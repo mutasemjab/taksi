@@ -5,7 +5,6 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use App\Models\Order;
 use App\Enums\OrderStatus;
-use Google\Cloud\Firestore\FirestoreClient;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -29,15 +28,6 @@ class CancelPendingOrders extends Command
     public function __construct()
     {
         parent::__construct();
-        
-        try {
-            $this->firestore = new FirestoreClient([
-                'projectId' => config('firebase.project_id'),
-                'keyFilePath' => config('firebase.credentials.file'),
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Failed to initialize Firestore in CancelPendingOrders command: ' . $e->getMessage());
-        }
     }
 
     /**
@@ -45,6 +35,14 @@ class CancelPendingOrders extends Command
      */
     public function handle()
     {
+        // Initialize Firestore from service container (avoids gRPC error)
+        try {
+            $this->firestore = app('firebase.firestore')->database();
+        } catch (\Exception $e) {
+            Log::error('Failed to initialize Firestore in CancelPendingOrders command: ' . $e->getMessage());
+            $this->error('Failed to initialize Firestore. Check logs.');
+        }
+
         $hoursThreshold = $this->option('hours');
         $this->info("Starting to process pending orders older than {$hoursThreshold} hour(s)...");
 
@@ -76,7 +74,6 @@ class CancelPendingOrders extends Command
 
                 // Remove from Firestore
                 $this->removeOrderFromFirestore($order->id);
-
 
                 $successCount++;
                 $this->info("✓ Order #{$order->id} cancelled successfully.");
@@ -125,7 +122,7 @@ class CancelPendingOrders extends Command
 
         try {
             // Remove from ride_requests collection
-            $rideRequestsCollection = $this->firestore->database()->collection('ride_requests');
+            $rideRequestsCollection = $this->firestore->collection('ride_requests');
             $rideRequestsCollection->document((string)$orderId)->delete();
 
             Log::info("Order #{$orderId} removed from Firestore ride_requests collection");
@@ -135,5 +132,4 @@ class CancelPendingOrders extends Command
             throw $e;
         }
     }
-
 }

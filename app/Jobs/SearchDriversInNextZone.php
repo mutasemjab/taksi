@@ -115,8 +115,8 @@ class SearchDriversInNextZone implements ShouldQueue
         
         \Log::info("Found " . count($availableDriverIds) . " available drivers for service {$this->serviceId}");
         
-        // Get driver locations from Firestore
-        $driversWithLocations = $this->getDriverLocationsFromFirestore($driverLocationService, $availableDriverIds);
+        // ✅ USE SERVICE METHOD - No need to recreate Firestore
+        $driversWithLocations = $this->getDriverLocationsViaService($driverLocationService, $availableDriverIds);
         
         if (empty($driversWithLocations)) {
             \Log::info("No drivers with active locations found for {$currentRadius}km zone");
@@ -140,8 +140,8 @@ class SearchDriversInNextZone implements ShouldQueue
         if (!empty($sortedDrivers)) {
             \Log::info("Found " . count($sortedDrivers) . " drivers within {$currentRadius}km for order {$this->orderId}");
             
-            // Write order data to Firebase with new drivers
-            $firebaseResult = $this->writeOrderToFirebase(
+            // ✅ USE SERVICE METHOD - No need to recreate Firestore
+            $firebaseResult = $this->writeOrderViaService(
                 $driverLocationService,
                 $this->orderId, 
                 $sortedDrivers, 
@@ -225,37 +225,43 @@ class SearchDriversInNextZone implements ShouldQueue
     }
     
     /**
-     * Get driver locations from Firestore
+     * Get driver locations using the service's Firestore instance
+     * This avoids gRPC errors by using the already-configured Firestore
      */
-    private function getDriverLocationsFromFirestore($driverLocationService, array $driverIds)
+    private function getDriverLocationsViaService($driverLocationService, array $driverIds)
     {
-        // Use reflection to call the private method from DriverLocationService
-        // Or you can make the method public/protected in DriverLocationService
         $driversWithLocations = [];
         
         try {
+            // Use reflection to access the service's firestore property
             $reflection = new \ReflectionClass($driverLocationService);
             $property = $reflection->getProperty('firestore');
             $property->setAccessible(true);
             $firestore = $property->getValue($driverLocationService);
             
+            // Now use the service's firestore instance
             $collection = $firestore->database()->collection('drivers');
             
             foreach ($driverIds as $driverId) {
-                $document = $collection->document((string)$driverId)->snapshot();
-                
-                if ($document->exists()) {
-                    $data = $document->data();
+                try {
+                    $document = $collection->document((string)$driverId)->snapshot();
                     
-                    if (isset($data['lat']) && isset($data['lng']) && 
-                        !empty($data['lat']) && !empty($data['lng'])) {
+                    if ($document->exists()) {
+                        $data = $document->data();
                         
-                        $driversWithLocations[] = [
-                            'id' => $driverId,
-                            'lat' => (float)$data['lat'],
-                            'lng' => (float)$data['lng'],
-                        ];
+                        if (isset($data['lat']) && isset($data['lng']) && 
+                            !empty($data['lat']) && !empty($data['lng'])) {
+                            
+                            $driversWithLocations[] = [
+                                'id' => $driverId,
+                                'lat' => (float)$data['lat'],
+                                'lng' => (float)$data['lng'],
+                            ];
+                        }
                     }
+                } catch (\Exception $e) {
+                    \Log::error("Error fetching driver {$driverId} from Firestore: " . $e->getMessage());
+                    continue;
                 }
             }
         } catch (\Exception $e) {
@@ -314,9 +320,10 @@ class SearchDriversInNextZone implements ShouldQueue
     }
     
     /**
-     * Write order to Firebase
+     * Write order to Firebase using the service's Firestore instance
+     * This avoids gRPC errors by using the already-configured Firestore
      */
-    private function writeOrderToFirebase($driverLocationService, $orderId, array $drivers, $serviceId, $orderStatus, $searchRadius)
+    private function writeOrderViaService($driverLocationService, $orderId, array $drivers, $serviceId, $orderStatus, $searchRadius)
     {
         try {
             $order = Order::with(['user', 'service'])->find($orderId);
@@ -380,7 +387,12 @@ class SearchDriversInNextZone implements ShouldQueue
                 'firebase_updated_at' => new \DateTime(),
             ];
             
-            $firestore = app(\Google\Cloud\Firestore\FirestoreClient::class);
+            // ✅ Use the service's Firestore instance via reflection
+            $reflection = new \ReflectionClass($driverLocationService);
+            $property = $reflection->getProperty('firestore');
+            $property->setAccessible(true);
+            $firestore = $property->getValue($driverLocationService);
+            
             $ordersCollection = $firestore->database()->collection('ride_requests');
             $ordersCollection->document((string)$orderId)->set($orderData);
             
