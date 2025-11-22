@@ -88,13 +88,13 @@ class SearchDriversInNextZone implements ShouldQueue
     /**
      * Check if drivers are available (MySQL only - no Firestore)
      */
-    private function checkAvailableDrivers($serviceId, $radius)
+     private function checkAvailableDrivers($serviceId, $radius)
     {
         $minWalletBalance = \DB::table('settings')
             ->where('key', 'minimum_money_in_wallet_driver_to_get_order')
             ->value('value') ?? 0;
         
-        return Driver::where('status', 1)
+        $query = Driver::where('status', 1)
             ->where('activate', 1)
             ->where('balance', '>=', $minWalletBalance)
             ->whereNotIn('id', function($query) {
@@ -105,9 +105,17 @@ class SearchDriversInNextZone implements ShouldQueue
             })
             ->whereHas('services', function($query) use ($serviceId) {
                 $query->where('service_id', $serviceId)
-                      ->where('driver_services.status', 1);
-            })
-            ->count();
+                    ->where('driver_services.status', 1);
+            });
+        
+        // ✅ Exclude drivers who rejected this order
+        $query->whereNotIn('id', function($subQuery) {
+            $subQuery->select('driver_id')
+                ->from('order_rejections')
+                ->where('order_id', $this->orderId);
+        });
+        
+        return $query->count();
     }
     
     /**

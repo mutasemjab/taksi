@@ -116,6 +116,8 @@ Route::group(['prefix' => 'v1/driver'], function () {
     // Auth Route
     Route::group(['middleware' => ['auth:driver-api', 'check.driver.activation']], function () {
 
+        Route::post('/orders/{id}/reject', [OrderDriverController::class, 'rejectOrder']);
+
         Route::get('/hotSpots', [HotSpotsController::class, 'index']);
         Route::get('/getStatusOfDriver', [AuthController::class, 'getStatusOfDriver']);
         Route::get('/active', [AuthController::class, 'active']);
