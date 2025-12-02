@@ -39,7 +39,7 @@ class OrderDriverController extends Controller
         try {
             $driverId = auth()->id();
             $order = Order::find($orderId);
-            
+
             if (!$order) {
                 return response()->json([
                     'status' => false,
@@ -47,7 +47,7 @@ class OrderDriverController extends Controller
                     'message' => 'Order not found'
                 ], 404);
             }
-            
+
             // Check if order is still pending
             if ($order->status != OrderStatus::Pending) {
                 return response()->json([
@@ -56,23 +56,22 @@ class OrderDriverController extends Controller
                     'type' => 'not_found',
                 ], 400);
             }
-            
+
             // Record the rejection
             OrderRejection::firstOrCreate([
                 'order_id' => $orderId,
                 'driver_id' => $driverId,
             ]);
-            
+
             \Log::info("Driver {$driverId} rejected order {$orderId}");
-            
+
             return response()->json([
                 'status' => true,
                 'message' => 'Order rejected successfully'
             ]);
-            
         } catch (\Exception $e) {
             \Log::error("Error rejecting order: " . $e->getMessage());
-            
+
             return response()->json([
                 'status' => false,
                 'message' => 'Error rejecting order'
@@ -393,207 +392,209 @@ class OrderDriverController extends Controller
     }
 
     public function updateStatus(Request $request, $id)
-{
-    $driver = Auth::guard('driver-api')->user();
-    $order = Order::with(['service', 'user', 'driver', 'coupon'])->where('id', $id)
-        ->where('driver_id', $driver->id)
-        ->first();
+    {
+        $driver = Auth::guard('driver-api')->user();
+        $order = Order::with(['service', 'user', 'driver', 'coupon'])->where('id', $id)
+            ->where('driver_id', $driver->id)
+            ->first();
 
-    if (!$order) {
-        return $this->error_response('Order not found', null);
-    }
-
-    $allowedStatuses = [
-        OrderStatus::DriverGoToUser->value,
-        OrderStatus::UserWithDriver->value,
-        OrderStatus::waitingPayment->value,
-        OrderStatus::Arrived->value,
-        OrderStatus::Delivered->value,
-    ];
-
-    $validator = Validator::make($request->all(), [
-        'status' => 'required|in:' . implode(',', $allowedStatuses),
-        'drop_name' => 'required_if:status,' . OrderStatus::waitingPayment->value,
-        'drop_lat' => 'required_if:status,' . OrderStatus::waitingPayment->value,
-        'drop_lng' => 'required_if:status,' . OrderStatus::waitingPayment->value,
-        'live_fare' => 'required_if:status,' . OrderStatus::waitingPayment->value . '|numeric|min:0',
-        'live_distance' => 'required_if:status,' . OrderStatus::waitingPayment->value . '|numeric|min:0',
-        'waiting_time' => 'required_if:status,' . OrderStatus::waitingPayment->value . '|integer|min:0',
-        // NEW: Optional returned amount field for Delivered status
-        'returned_amount' => 'nullable|numeric|min:0.01',
-    ]);
-
-    if ($validator->fails()) {
-        return $this->error_response('Validation error', $validator->errors());
-    }
-
-    try {
-        DB::beginTransaction();
-
-        $statusService = app(OrderStatusService::class);
-        $currentStatus = $order->status;
-        $newStatus = OrderStatus::from($request->status);
-
-        // Record status change FIRST
-        $statusChange = $statusService->recordStatusChange(
-            $order,
-            $newStatus->value,
-            $driver->id,
-            'driver'
-        );
-
-        // Track when trip starts
-        if ($newStatus === OrderStatus::UserWithDriver && is_null($order->trip_started_at)) {
-            $order->trip_started_at = now();
+        if (!$order) {
+            return $this->error_response('Order not found', null);
         }
 
-        // Calculate pricing for waiting payment
-        $pricingDetails = null;
-        if ($newStatus === OrderStatus::waitingPayment) {
-            // Update drop location
-            $order->drop_name = $request->input('drop_name');
-            $order->drop_lat = (float) $request->input('drop_lat');
-            $order->drop_lng = (float) $request->input('drop_lng');
+        $allowedStatuses = [
+            OrderStatus::DriverGoToUser->value,
+            OrderStatus::UserWithDriver->value,
+            OrderStatus::waitingPayment->value,
+            OrderStatus::Arrived->value,
+            OrderStatus::Delivered->value,
+        ];
 
-            // Get live data from mobile
-            $liveFare = (float) $request->input('live_fare');
-            $liveDistance = (float) $request->input('live_distance');
-            $inTripWaitingMinutes = (int) ($request->input('waiting_time') / 60);
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|in:' . implode(',', $allowedStatuses),
+            'drop_name' => 'required_if:status,' . OrderStatus::waitingPayment->value,
+            'drop_lat' => 'required_if:status,' . OrderStatus::waitingPayment->value,
+            'drop_lng' => 'required_if:status,' . OrderStatus::waitingPayment->value,
+            'live_fare' => 'required_if:status,' . OrderStatus::waitingPayment->value . '|numeric|min:0',
+            'live_distance' => 'required_if:status,' . OrderStatus::waitingPayment->value . '|numeric|min:0',
+            'waiting_time' => 'required_if:status,' . OrderStatus::waitingPayment->value . '|integer|min:0',
+            // NEW: Optional returned amount field for Delivered status
+            'returned_amount' => 'nullable|numeric|min:0.01',
+        ]);
 
-            // Store the live distance and in-trip waiting time
-            $order->live_distance = $liveDistance;
-            $order->in_trip_waiting_minutes = $inTripWaitingMinutes;
+        if ($validator->fails()) {
+            return $this->error_response('Validation error', $validator->errors());
+        }
 
-            // Calculate the final price using the new method
-            $pricingDetails = $this->calculateFinalPriceFromLiveData(
+        try {
+            DB::beginTransaction();
+
+            $statusService = app(OrderStatusService::class);
+            $currentStatus = $order->status;
+            $newStatus = OrderStatus::from($request->status);
+
+            // Record status change FIRST
+            $statusChange = $statusService->recordStatusChange(
                 $order,
-                $liveFare,
-                $liveDistance,
-                $inTripWaitingMinutes
+                $newStatus->value,
+                $driver->id,
+                'driver'
             );
 
-            // Update order with calculated values
-            $order->total_price_before_discount = $pricingDetails['total_before_discount'];
-            $order->discount_value = $pricingDetails['discount_value'];
-            $order->total_price_after_discount = $pricingDetails['final_price'];
-            $order->net_price_for_driver = $pricingDetails['net_price_for_driver'];
-            $order->commision_of_admin = $pricingDetails['admin_commission'];
-            $order->total_waiting_minutes = $pricingDetails['driver_waiting_details']['total_waiting_minutes'];
-            $order->waiting_charges = $pricingDetails['driver_waiting_details']['waiting_charges'];
-            $order->in_trip_waiting_charges = $pricingDetails['in_trip_waiting_charges'];
-
-            // Complete trip timing
-            if ($order->trip_started_at && !$order->trip_completed_at) {
-                $tripCompletedAt = now();
-                $order->trip_completed_at = $tripCompletedAt;
-                $order->actual_trip_duration_minutes = $order->trip_started_at->diffInMinutes($tripCompletedAt);
+            // Track when trip starts
+            if ($newStatus === OrderStatus::UserWithDriver && is_null($order->trip_started_at)) {
+                $order->trip_started_at = now();
             }
 
-            $order->status = $newStatus;
-            $order->save();
+            // Calculate pricing for waiting payment
+            $pricingDetails = null;
+            if ($newStatus === OrderStatus::waitingPayment) {
+                // Update drop location
+                $order->drop_name = $request->input('drop_name');
+                $order->drop_lat = (float) $request->input('drop_lat');
+                $order->drop_lng = (float) $request->input('drop_lng');
 
-            Log::info("Order {$order->id}: Final price calculated from live data", [
-                'live_fare' => $liveFare,
-                'live_distance' => $liveDistance,
-                'in_trip_waiting' => $inTripWaitingMinutes,
-                'driver_waiting_charges' => $pricingDetails['driver_waiting_details']['waiting_charges'],
-                'final_price' => $pricingDetails['final_price']
-            ]);
-        }
+                // Get live data from mobile
+                $liveFare = (float) $request->input('live_fare');
+                $liveDistance = (float) $request->input('live_distance');
+                $inTripWaitingMinutes = (int) ($request->input('waiting_time') / 60);
 
-        // Process payment when status is delivered
-        $paymentDetails = null;
-        $balanceTransferDetails = null;
-        
-        if ($newStatus === OrderStatus::Delivered) {
-            // Store returned amount if provided (sent with Delivered status)
-            if ($request->has('returned_amount') && $request->input('returned_amount') > 0) {
-                $order->returned_amount = (float) $request->input('returned_amount');
+                // Store the live distance and in-trip waiting time
+                $order->live_distance = $liveDistance;
+                $order->in_trip_waiting_minutes = $inTripWaitingMinutes;
+
+                // Calculate the final price using the new method
+                $pricingDetails = $this->calculateFinalPriceFromLiveData(
+                    $order,
+                    $liveFare,
+                    $liveDistance,
+                    $inTripWaitingMinutes
+                );
+
+                // Update order with calculated values
+                $order->total_price_before_discount = $pricingDetails['total_before_discount'];
+                $order->discount_value = $pricingDetails['discount_value'];
+                $order->total_price_after_discount = $pricingDetails['final_price'];
+                $order->net_price_for_driver = $pricingDetails['net_price_for_driver'];
+                $order->commision_of_admin = $pricingDetails['admin_commission'];
+                $order->total_waiting_minutes = $pricingDetails['driver_waiting_details']['total_waiting_minutes'];
+                $order->waiting_charges = $pricingDetails['driver_waiting_details']['waiting_charges'];
+                $order->in_trip_waiting_charges = $pricingDetails['in_trip_waiting_charges'];
+
+                // Complete trip timing
+                if ($order->trip_started_at && !$order->trip_completed_at) {
+                    $tripCompletedAt = now();
+                    $order->trip_completed_at = $tripCompletedAt;
+                    $order->actual_trip_duration_minutes = $order->trip_started_at->diffInMinutes($tripCompletedAt);
+                }
+
+                $order->status = $newStatus;
+                $order->save();
+
+                Log::info("Order {$order->id}: Final price calculated from live data", [
+                    'live_fare' => $liveFare,
+                    'live_distance' => $liveDistance,
+                    'in_trip_waiting' => $inTripWaitingMinutes,
+                    'driver_waiting_charges' => $pricingDetails['driver_waiting_details']['waiting_charges'],
+                    'final_price' => $pricingDetails['final_price']
+                ]);
+            }
+
+            // Process payment when status is delivered
+            $paymentDetails = null;
+            $balanceTransferDetails = null;
+
+            if ($newStatus === OrderStatus::Delivered) {
+                // Store returned amount if provided (sent with Delivered status)
+                if ($request->has('returned_amount') && $request->input('returned_amount') > 0) {
+                    $order->returned_amount = (float) $request->input('returned_amount');
+                    $order->save();
+                }
+
+                $result = $this->orderPaymentService->markAsDeliveredAndProcessPayment($order, $driver);
+
+                if (!$result['success']) {
+                    throw new \Exception($result['error']);
+                }
+
+                $order = $result['order'];
+                $paymentDetails = $result['payment_details'];
+
+                $driver->refresh();
+
+                // Process returned amount if exists and payment is cash
+                if ($order->returned_amount > 0 && $order->payment_method === 'cash') {
+                    $balanceTransferResult = $this->processReturnedAmount($order, $driver);
+
+                    if (!$balanceTransferResult['success']) {
+                        throw new \Exception($balanceTransferResult['error']);
+                    }
+
+                    $balanceTransferDetails = $balanceTransferResult['details'];
+
+                    Log::info("Order {$order->id}: Returned amount processed", [
+                        'amount' => $order->returned_amount,
+                        'driver_new_balance' => $balanceTransferDetails['driver_new_balance']
+                    ]);
+                }
+            } else if ($newStatus !== OrderStatus::waitingPayment) {
+                // Update status for other cases
+                $order->status = $newStatus;
                 $order->save();
             }
 
-            $result = $this->orderPaymentService->markAsDeliveredAndProcessPayment($order, $driver);
+            DB::commit();
 
-            if (!$result['success']) {
-                throw new \Exception($result['error']);
+            // Send notifications
+            EnhancedFCMService::sendOrderStatusToUser($id, $newStatus);
+
+            if ($newStatus === OrderStatus::Arrived) {
+                EnhancedFCMService::sendDriverArrivalNotification($id);
             }
 
-            $order = $result['order'];
-            $paymentDetails = $result['payment_details'];
+            $responseData = [
+                'order_id' => $order->id,
+                'status' => $order->status->value,
+                'status_text' => $order->getStatusText(),
+                'payment_status' => $order->status_payment->value,
+                'payment_status_text' => $order->getPaymentStatusText(),
+                'trip_started_at' => $order->trip_started_at,
+                'trip_completed_at' => $order->trip_completed_at,
+                'actual_duration_minutes' => $order->actual_trip_duration_minutes,
+                'status_change' => [
+                    'previous_status' => $statusChange['previous_status'],
+                    'new_status' => $newStatus->value,
+                    'duration_from_previous' => $statusChange['duration_minutes'],
+                    'changed_at' => $statusChange['changed_at']->format('Y-m-d H:i:s')
+                ]
+            ];
 
-            // Process returned amount if exists and payment is cash
-            if ($order->returned_amount > 0 && $order->payment_method === 'cash') {
-                $balanceTransferResult = $this->processReturnedAmount($order, $driver);
-                
-                if (!$balanceTransferResult['success']) {
-                    throw new \Exception($balanceTransferResult['error']);
-                }
-                
-                $balanceTransferDetails = $balanceTransferResult['details'];
-                
-                Log::info("Order {$order->id}: Returned amount processed", [
-                    'amount' => $order->returned_amount,
-                    'driver_new_balance' => $balanceTransferDetails['driver_new_balance']
-                ]);
+            if ($pricingDetails) {
+                $responseData['pricing_details'] = $pricingDetails;
             }
-        } else if ($newStatus !== OrderStatus::waitingPayment) {
-            // Update status for other cases
-            $order->status = $newStatus;
-            $order->save();
+
+            if ($paymentDetails) {
+                $responseData['payment_details'] = $paymentDetails;
+            }
+
+            if ($balanceTransferDetails) {
+                $responseData['balance_transfer'] = $balanceTransferDetails;
+            }
+
+            return $this->success_response('Order status updated successfully', $responseData);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error updating order status: ' . $e->getMessage());
+
+            return $this->error_response('Error updating order status', $e->getMessage());
         }
-
-        DB::commit();
-
-        // Send notifications
-        EnhancedFCMService::sendOrderStatusToUser($id, $newStatus);
-
-        if ($newStatus === OrderStatus::Arrived) {
-            EnhancedFCMService::sendDriverArrivalNotification($id);
-        }
-
-        $responseData = [
-            'order_id' => $order->id,
-            'status' => $order->status->value,
-            'status_text' => $order->getStatusText(),
-            'payment_status' => $order->status_payment->value,
-            'payment_status_text' => $order->getPaymentStatusText(),
-            'trip_started_at' => $order->trip_started_at,
-            'trip_completed_at' => $order->trip_completed_at,
-            'actual_duration_minutes' => $order->actual_trip_duration_minutes,
-            'status_change' => [
-                'previous_status' => $statusChange['previous_status'],
-                'new_status' => $newStatus->value,
-                'duration_from_previous' => $statusChange['duration_minutes'],
-                'changed_at' => $statusChange['changed_at']->format('Y-m-d H:i:s')
-            ]
-        ];
-
-        if ($pricingDetails) {
-            $responseData['pricing_details'] = $pricingDetails;
-        }
-
-        if ($paymentDetails) {
-            $responseData['payment_details'] = $paymentDetails;
-        }
-
-        if ($balanceTransferDetails) {
-            $responseData['balance_transfer'] = $balanceTransferDetails;
-        }
-
-        return $this->success_response('Order status updated successfully', $responseData);
-    } catch (\Exception $e) {
-        DB::rollBack();
-        Log::error('Error updating order status: ' . $e->getMessage());
-
-        return $this->error_response('Error updating order status', $e->getMessage());
     }
-}
 
-   private function processReturnedAmount($order, $driver)
+    private function processReturnedAmount($order, $driver)
     {
         try {
             $amount = $order->returned_amount;
-            
+
             // Validate user exists
             if (!$order->user) {
                 return [
@@ -602,16 +603,19 @@ class OrderDriverController extends Controller
                 ];
             }
 
+            // Get fresh driver data from database
+            $driverModel = Driver::find($driver->id);
+
             // Check if driver has sufficient balance
-            if ($driver->balance < $amount) {
+            if ($driverModel->balance < $amount) {
                 return [
                     'success' => false,
-                    'error' => 'Insufficient balance in driver wallet. Balance: ' . $driver->balance . ', Required: ' . $amount
+                    'error' => 'Insufficient balance in driver wallet. Balance: ' . $driverModel->balance . ', Required: ' . $amount
                 ];
             }
 
             // Deduct amount from driver's wallet balance
-            $driver->decrement('balance', $amount);
+            $driverModel->decrement('balance', $amount);
 
             // Add amount to user's wallet balance
             $order->user->increment('balance', $amount);
@@ -638,8 +642,8 @@ class OrderDriverController extends Controller
                 'note' => "Change paid to user from order #{$order->number}"
             ]);
 
-            // Refresh driver to get updated balance
-            $driver->refresh();
+            // Get updated balance
+            $driverModel->refresh();
 
             return [
                 'success' => true,
@@ -647,7 +651,7 @@ class OrderDriverController extends Controller
                     'amount' => $amount,
                     'user_id' => $order->user_id,
                     'user_name' => $order->user->name,
-                    'driver_new_balance' => $driver->balance,
+                    'driver_new_balance' => $driverModel->balance,
                     'user_transaction_id' => $userTransaction->id,
                     'driver_transaction_id' => $driverTransaction->id,
                     'processed_at' => now()->format('Y-m-d H:i:s')
@@ -673,7 +677,7 @@ class OrderDriverController extends Controller
     private function calculateFinalPriceFromLiveData(Order $order, float $liveFare, float $liveDistance, int $inTripWaitingMinutes)
     {
         $service = $order->service;
-        
+
         // Step 1: Start with the live fare from mobile 
         // This ALREADY includes: base distance fare + in-trip waiting charges
         $baseFare = $liveFare;
