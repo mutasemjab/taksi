@@ -2,8 +2,8 @@
 
 return [
 
-    "Home" => "Home",
-    "Logout" => "Logout",
+    "Home"=>"Home",
+    "Logout"=>"Logout",
     'ID' => 'ID',
     'Name' => 'Name',
     'Phone' => 'Phone',
@@ -51,70 +51,8 @@ return [
 
     'Banners' => 'Banners',
 
-    'driver_alerts' => 'Driver Alerts',
-    'ID' => 'ID',
-    'Driver' => 'Driver',
-    'Report' => 'Report',
-    'Lat' => 'Latitude',
-    'Lng' => 'Longitude',
-    'Note' => 'Note',
-    'Status' => 'Status',
-    'Created_At' => 'Created At',
-    'Actions' => 'Actions',
-    'Pending' => 'Pending',
-    'Done' => 'Done',
-    'Delete' => 'Delete',
-    'Notify_Nearby' => 'Notify Nearby',
-    'Delete_Confirm' => 'Delete this alert?',
-    'New Alert' => 'New Alert',
-    'Waiting_Charges' => 'Waiting Charges Configuration',
-    'Free_Waiting_Minutes' => 'Free Waiting Minutes',
-    'Free_Waiting_Minutes_Info' => 'Number of free minutes when driver arrives (arrived → started)',
-    'Waiting_Charge_Per_Minute' => 'Charge Per Minute (Pre-Trip)',
-    'Waiting_Charge_Per_Minute_Info' => 'Charge per minute after free waiting period (JD)',
-    'In_Trip_Waiting_Charge' => 'In-Trip Waiting Charge',
-    'In_Trip_Waiting_Charge_Info' => 'Charge per minute for stops during trip (traffic, lights) (JD)',
-    'Waiting_Charges_Details' => 'Waiting Charges Details',
-    'Pre_Trip_Waiting' => 'Pre-Trip Waiting (Arrived → Started)',
-    'In_Trip_Waiting' => 'In-Trip Waiting (Traffic & Stops)',
-    'Arrived_At' => 'Driver Arrived At',
-    'Arrived_At_Info' => 'Time when driver arrived at pickup location',
-    'Total_Waiting_Minutes' => 'Total Waiting Minutes',
-    'Total_Waiting_Minutes_Info' => 'Minutes driver waited for passenger (after free period)',
-    'Waiting_Charges' => 'Pre-Trip Waiting Charges',
-    'Waiting_Charges_Info' => 'Charges for waiting at pickup location (JD)',
-    'In_Trip_Waiting_Minutes' => 'In-Trip Waiting Minutes',
-    'In_Trip_Waiting_Minutes_Info' => 'Minutes stopped during trip (traffic lights, traffic jams)',
-    'In_Trip_Waiting_Charges' => 'In-Trip Waiting Charges',
-    'In_Trip_Waiting_Charges_Info' => 'Charges for stops during active trip (JD)',
-    'Waiting_Charges_Note' => 'Pre-trip waiting is charged after free minutes. In-trip waiting is charged from the first minute when pricing method is "both".',
-    'Pre_Trip_Waiting_Info' => 'Charged after free waiting minutes when driver waits for passenger',
-    'In_Trip_Waiting_Info_Show' => 'Charged for stops during the trip (traffic lights, traffic jams, etc.)',
-    'Total_Waiting_Charges' => 'Total Waiting Charges',
-    'Total_Waiting_Impact' => 'Total Waiting Impact on Price',
-    'Total_Waiting_Impact_Description' => 'Combined pre-trip and in-trip waiting charges',
-    'Not_Set' => 'Not Set',
-    'Minutes' => 'min',
-    'JD' => 'JD',
-    'Note' => 'Note',
-    'Order_Status_History_Report' => 'Order Status History Report',
-    'Order_Status_Details' => 'Order Status Details',
-    'Status_Timeline' => 'Status Timeline',
-    'Visual_Timeline' => 'Visual Timeline',
-    'Total_Duration' => 'Total Duration',
-    'Total_Order_Duration' => 'Total Order Duration',
-    'Started_At' => 'Started At',
-    'Ended_At' => 'Ended At',
-    'Duration' => 'Duration',
-    'Next_Status' => 'Next Status',
-    'Changed_By' => 'Changed By',
-    'In_Progress' => 'In Progress',
-    'Current' => 'Current',
-    'Export_CSV' => 'Export to CSV',
-    'No_Status_History_Found' => 'No status history found',
-    'View_Details' => 'View Details',
 
-
+   
     // Banner
     'banner_created' => 'Banner created successfully',
     'banner_updated' => 'Banner updated successfully',
@@ -167,7 +105,7 @@ return [
     'Type' => 'Type',
 
     // not translate
-    'Services' => 'Services',
+     'Services' => 'Services',
     'Service' => 'Service',
     'Services_List' => 'Services List',
     'Service_Details' => 'Service Details',
@@ -329,7 +267,7 @@ return [
     'Date_To' => 'Date To',
     'Filter' => 'Filter',
     'Reset' => 'Reset',
-
+    
     // Order Status
     'Pending' => 'Pending',
     'Driver_Accepted' => 'Driver Accepted',
@@ -338,33 +276,33 @@ return [
     'Delivered' => 'Delivered',
     'User_Cancelled' => 'User Cancelled',
     'Driver_Cancelled' => 'Driver Cancelled',
-
+    
     // Payment Methods
     'Cash' => 'Cash',
     'Visa' => 'Visa',
     'Wallet' => 'Wallet',
     'Paid' => 'Paid',
-
+    
     // Statistics
     'Total_Orders' => 'Total Orders',
     'Completed_Orders' => 'Completed Orders',
     'Cancelled_Orders' => 'Cancelled Orders',
     'Total_Revenue' => 'Total Revenue',
     'Orders_List' => 'Orders List',
-
+    
     // Table Headers
     'ID' => 'ID',
     'Date' => 'Date',
     'Price' => 'Price',
     'Payment' => 'Payment',
     'Actions' => 'Actions',
-
+    
     // General
     'Not_Available' => 'Not Available',
     'Not_Assigned' => 'Not Assigned',
     'Delete_Confirm' => 'Are you sure you want to delete this item?',
     'Date_Range_Error' => 'End date cannot be earlier than start date',
-
+    
     // User Management
     'Create_User' => 'Create User',
     'Back_to_List' => 'Back to List',
@@ -382,7 +320,7 @@ return [
     'Choose_file' => 'Choose file',
     'Save' => 'Save',
     'Cancel' => 'Cancel',
-
+    
     // Order Management
     'Edit_Order' => 'Edit Order',
     'View' => 'View',
@@ -392,7 +330,7 @@ return [
     'Driver_Selection_Info' => 'Leave empty if no driver assigned',
     'Select_Service' => 'Select Service',
     'Cancellation_Reason' => 'Cancellation Reason',
-
+    
     // Location
     'Pickup_Location' => 'Pickup Location',
     'Dropoff_Location' => 'Dropoff Location',
@@ -400,7 +338,7 @@ return [
     'Dropoff_Name' => 'Dropoff Name',
     'Latitude' => 'Latitude',
     'Longitude' => 'Longitude',
-
+    
     // Pricing
     'Pricing_Details' => 'Pricing Details',
     'Original_Price' => 'Original Price',
@@ -410,7 +348,7 @@ return [
     'Driver_Earning' => 'Driver Earning',
     'Update' => 'Update',
     'Discount_Too_High' => 'Discount cannot be higher than original price',
-
+    
     // Order View
     'View_Order' => 'View Order',
     'Edit' => 'Edit',
@@ -427,7 +365,7 @@ return [
     'Created_At' => 'Created At',
     'Updated_At' => 'Updated At',
     'Update_Payment_Status' => 'Update Payment Status',
-
+    
     // User/Driver Information
     'User_Information' => 'User Information',
     'Driver_Information' => 'Driver Information',
@@ -436,7 +374,7 @@ return [
     'View_Orders' => 'View Orders',
     'User_Not_Available' => 'User information not available',
     'No_Driver_Assigned' => 'No driver assigned to this order',
-    'pos_list' => 'POS List',
+     'pos_list' => 'POS List',
     'create_pos' => 'Create POS',
     'edit_pos' => 'Edit POS',
     'pos_details' => 'POS Details',
@@ -471,7 +409,7 @@ return [
 
     // Confirmations
     'confirm_delete' => 'Are you sure you want to delete this record?',
-
+    
     // Cards related translations
     'cards_list' => 'Cards List',
     'create_card' => 'Create Card',
@@ -557,13 +495,13 @@ return [
     'error_updating_status' => 'Error updating status',
     'error_updating_activate' => 'Error updating activate status',
     'error_bulk_update' => 'Error performing bulk update',
-    'app_configurations' => 'App Configurations',
+ 'app_configurations' => 'App Configurations',
     'add_new_config' => 'Add New Configuration',
     'create_first_config' => 'Create First Configuration',
     'edit_config' => 'Edit Configuration',
     'view_config' => 'View Configuration',
     'no_configurations_found' => 'No configurations found.',
-
+    
     // Form Fields
     'id' => 'ID',
     'email' => 'Email',
@@ -573,7 +511,7 @@ return [
     'driver_app_configuration' => 'Driver App Configuration',
     'user_app_links' => 'User App Links',
     'driver_app_links' => 'Driver App Links',
-
+    
     // User App Fields
     'google_play_link_user_app' => 'Google Play Link (User App)',
     'app_store_link_user_app' => 'App Store Link (User App)',
@@ -581,7 +519,7 @@ return [
     'min_version_google_play_user_app' => 'Minimum Version Google Play (User App)',
     'min_version_app_store_user_app' => 'Minimum Version App Store (User App)',
     'min_version_hawawi_user_app' => 'Minimum Version Hawawi (User App)',
-
+    
     // Driver App Fields
     'google_play_link_driver_app' => 'Google Play Link (Driver App)',
     'app_store_link_driver_app' => 'App Store Link (Driver App)',
@@ -589,14 +527,14 @@ return [
     'min_version_google_play_driver_app' => 'Minimum Version Google Play (Driver App)',
     'min_version_app_store_driver_app' => 'Minimum Version App Store (Driver App)',
     'min_version_hawawi_driver_app' => 'Minimum Version Hawawi (Driver App)',
-
+    
     'created_at' => 'Created At',
     'updated_at' => 'Updated At',
     'version_app_store' => 'Minimum Version (App Store)',
     'min_version_hawawi' => 'Minimum Version (Hawawi)',
     'created_at' => 'Created At',
     'updated_at' => 'Updated At',
-
+    
     // Form Placeholders
     'enter_email' => 'Enter email address',
     'enter_phone' => 'Enter phone number',
@@ -607,12 +545,12 @@ return [
     'enter_app_store_link_driver_app' => 'Enter App Store link for driver app',
     'enter_hawawi_link_driver_app' => 'Enter Hawawi store link for driver app',
     'enter_version' => 'Enter version (e.g., 1.0.0)',
-
+    
     // Store Names
     'google_play' => 'Google Play',
     'app_store' => 'App Store',
     'hawawi' => 'Hawawi',
-
+    
     // Actions
     'actions' => 'Actions',
     'back' => 'Back',
@@ -623,18 +561,18 @@ return [
     'cancel' => 'Cancel',
     'open_link' => 'Open Link',
     'not_set' => 'Not Set',
-
+    
     // Success Messages
     'app_config_created_successfully' => 'App configuration created successfully!',
     'app_config_updated_successfully' => 'App configuration updated successfully!',
     'app_config_deleted_successfully' => 'App configuration deleted successfully!',
-
+    
     // Confirmation Messages
     'confirm_delete' => 'Are you sure you want to delete this configuration?',
 
     'number_of_used' => 'Number of used',
     'complaints' => 'Complaints',
-    'View_Complaint' => 'View Complaint',
+     'View_Complaint' => 'View Complaint',
     'Complaint_Details' => 'Complaint Details',
     'Subject' => 'Subject',
     'Description' => 'Description',
@@ -642,27 +580,27 @@ return [
     'Done' => 'Done',
     'Order' => 'Order',
     'Ratings' => 'Ratings',
-    'Rating' => 'Rating',
-    'View_Rating' => 'View Rating',
-    'Rating_Details' => 'Rating Details',
-    'Total_Ratings' => 'Total Ratings',
-    'Average_Rating' => 'Average Rating',
-    'Five_Star_Ratings' => '5 Star Ratings',
-    'One_Star_Ratings' => '1 Star Ratings',
-    'Rating_Distribution' => 'Rating Distribution',
-    'All_Ratings' => 'All Ratings',
-    'Review' => 'Review',
-    'No_Review' => 'No Review',
-    'Stars' => 'Stars',
-    'Star' => 'Star',
-    'Search_by_user_driver_or_review' => 'Search by user, driver or review',
-    'Are_you_sure_delete_rating' => 'Are you sure you want to delete this rating?',
-    'Rating_Deleted_Successfully' => 'Rating deleted successfully',
-    'Delete_Rating' => 'Delete Rating',
-    'No_Ratings_Found' => 'No ratings found',
-    'User_Information' => 'User Information',
-    'Driver_Information' => 'Driver Information',
-    'Morning' => 'Morning',
+'Rating' => 'Rating',
+'View_Rating' => 'View Rating',
+'Rating_Details' => 'Rating Details',
+'Total_Ratings' => 'Total Ratings',
+'Average_Rating' => 'Average Rating',
+'Five_Star_Ratings' => '5 Star Ratings',
+'One_Star_Ratings' => '1 Star Ratings',
+'Rating_Distribution' => 'Rating Distribution',
+'All_Ratings' => 'All Ratings',
+'Review' => 'Review',
+'No_Review' => 'No Review',
+'Stars' => 'Stars',
+'Star' => 'Star',
+'Search_by_user_driver_or_review' => 'Search by user, driver or review',
+'Are_you_sure_delete_rating' => 'Are you sure you want to delete this rating?',
+'Rating_Deleted_Successfully' => 'Rating deleted successfully',
+'Delete_Rating' => 'Delete Rating',
+'No_Ratings_Found' => 'No ratings found',
+'User_Information' => 'User Information',
+'Driver_Information' => 'Driver Information',
+  'Morning' => 'Morning',
     'Evening' => 'Evening',
     'Morning_Pricing' => 'Morning Pricing',
     'Evening_Pricing' => 'Evening Pricing',
@@ -680,7 +618,7 @@ return [
     'Created_At' => 'Created At',
     'View' => 'View',
     'Delete' => 'Delete',
-
+    
     // Service form
     'Services' => 'Services',
     'Add_New_Service' => 'Add New Service',
@@ -694,7 +632,7 @@ return [
     'Pricing_Details' => 'Pricing Details',
     'Example_Trip_Cost' => 'Example Trip Cost',
     'Admin_Fee_Example' => 'Admin Fee Example',
-
+    
     // Form fields
     'Name_English' => 'Name (English)',
     'Name_Arabic' => 'Name (Arabic)',
@@ -722,7 +660,7 @@ return [
     'Inactive' => 'Inactive',
     'Payment_Method' => 'Payment Method',
     'Payment_Methods' => 'Payment Methods',
-
+    
     // Actions
     'Save' => 'Save',
     'Update' => 'Update',
@@ -731,15 +669,14 @@ return [
     'Back_to_List' => 'Back to List',
     'Actions' => 'Actions',
     'Delete_Confirm' => 'Are you sure you want to delete this service?',
-
+    
     // Messages
     'Service_Created_Successfully' => 'Service created successfully',
     'Service_Updated_Successfully' => 'Service updated successfully',
     'Service_Deleted_Successfully' => 'Service deleted successfully',
-    'reports' => 'Reports',
-    'Order_Status_History' => 'Order Status History',
-    'Current_Status' => 'Current Status',
+    '' => '',
     '' => '',
     '' => '',
     '' => '',
 ];
+
