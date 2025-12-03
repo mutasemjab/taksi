@@ -624,7 +624,7 @@ class OrderDriverController extends Controller
             $userTransaction = WalletTransaction::create([
                 'order_id' => $order->id,
                 'user_id' => $order->user_id,
-                'driver_id' => $driver->id,
+                'driver_id' => null,
                 'admin_id' => null,
                 'amount' => $amount,
                 'type_of_transaction' => 1, // 1 = add
@@ -634,7 +634,7 @@ class OrderDriverController extends Controller
             // Create wallet transaction record for DRIVER (withdrawal)
             $driverTransaction = WalletTransaction::create([
                 'order_id' => $order->id,
-                'user_id' => $order->user_id,
+                'user_id' => null,
                 'driver_id' => $driver->id,
                 'admin_id' => null,
                 'amount' => $amount,
