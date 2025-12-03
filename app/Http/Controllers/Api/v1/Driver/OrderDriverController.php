@@ -523,7 +523,7 @@ class OrderDriverController extends Controller
                 $driver->refresh();
 
                 // Process returned amount if exists and payment is cash
-                if ($order->returned_amount > 0 && $order->payment_method === 'cash') {
+                if ($order->returned_amount > 0 && $order->payment_method === PaymentMethod::Cash) {
                     $balanceTransferResult = $this->processReturnedAmount($order, $driver);
 
                     if (!$balanceTransferResult['success']) {
