@@ -155,8 +155,8 @@
                     <tbody>
                         @forelse($orders as $order)
                         @php
-                            $totalDuration = app('App\Http\Controllers\Admin\OrderStatusReportController')->calculateOrderTotalDuration($order->id);
-                            $durationFormatted = app('App\Http\Controllers\Admin\OrderStatusReportController')->formatDuration($totalDuration);
+                            $totalDuration = app('App\Http\Controllers\Reports\OrderStatusReportController')->calculateOrderTotalDuration($order->id);
+                            $durationFormatted = app('App\Http\Controllers\Reports\OrderStatusReportController')->formatDuration($totalDuration);
                         @endphp
                         <tr>
                             <td>
