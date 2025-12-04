@@ -50,12 +50,15 @@
             </div>
         </div>
         <div class="card-body">
+            @php
+                // Extract enum values at the top for reuse
+                $statusValue = is_object($order->status) ? $order->status->value : $order->status;
+                $paymentMethod = is_object($order->payment_method) ? $order->payment_method->value : $order->payment_method;
+                $paymentStatus = is_object($order->status_payment) ? $order->status_payment->value : $order->status_payment;
+            @endphp
             <div class="row">
                 <div class="col-md-8">
                     <!-- Status Timeline -->
-                    @php
-                        $statusValue = is_object($order->status) ? $order->status->value : $order->status;
-                    @endphp
                     <div class="timeline">
                         <div class="timeline-item {{ $statusValue == 'pending' ? 'active' : 'completed' }}">
                             <i class="fas fa-clock"></i> {{ __('messages.Pending') }}
@@ -87,20 +90,20 @@
                         <div class="form-group">
                             <label for="status">{{ __('messages.Change_Status') }}</label>
                             <select class="form-control" id="status" name="status">
-                                <option value="pending" {{ $order->status == 'pending' ? 'selected' : '' }}>{{ __('messages.Pending') }}</option>
-                                <option value="accepted" {{ $order->status == 'accepted' ? 'selected' : '' }}>{{ __('messages.Accepted') }}</option>
-                                <option value="on_the_way" {{ $order->status == 'on_the_way' ? 'selected' : '' }}>{{ __('messages.On_The_Way') }}</option>
-                                <option value="arrived" {{ $order->status == 'arrived' ? 'selected' : '' }}>{{ __('messages.Arrived') }}</option>
-                                <option value="started" {{ $order->status == 'started' ? 'selected' : '' }}>{{ __('messages.Started') }}</option>
-                                <option value="waiting_payment" {{ $order->status == 'waiting_payment' ? 'selected' : '' }}>{{ __('messages.Waiting_Payment') }}</option>
-                                <option value="completed" {{ $order->status == 'completed' ? 'selected' : '' }}>{{ __('messages.Completed') }}</option>
-                                <option value="user_cancel_order" {{ $order->status == 'user_cancel_order' ? 'selected' : '' }}>{{ __('messages.User_Cancelled') }}</option>
-                                <option value="driver_cancel_order" {{ $order->status == 'driver_cancel_order' ? 'selected' : '' }}>{{ __('messages.Driver_Cancelled') }}</option>
-                                <option value="cancel_cron_job" {{ $order->status == 'cancel_cron_job' ? 'selected' : '' }}>{{ __('messages.Cancelled_Auto') }}</option>
+                                <option value="pending" {{ $statusValue == 'pending' ? 'selected' : '' }}>{{ __('messages.Pending') }}</option>
+                                <option value="accepted" {{ $statusValue == 'accepted' ? 'selected' : '' }}>{{ __('messages.Accepted') }}</option>
+                                <option value="on_the_way" {{ $statusValue == 'on_the_way' ? 'selected' : '' }}>{{ __('messages.On_The_Way') }}</option>
+                                <option value="arrived" {{ $statusValue == 'arrived' ? 'selected' : '' }}>{{ __('messages.Arrived') }}</option>
+                                <option value="started" {{ $statusValue == 'started' ? 'selected' : '' }}>{{ __('messages.Started') }}</option>
+                                <option value="waiting_payment" {{ $statusValue == 'waiting_payment' ? 'selected' : '' }}>{{ __('messages.Waiting_Payment') }}</option>
+                                <option value="completed" {{ $statusValue == 'completed' ? 'selected' : '' }}>{{ __('messages.Completed') }}</option>
+                                <option value="user_cancel_order" {{ $statusValue == 'user_cancel_order' ? 'selected' : '' }}>{{ __('messages.User_Cancelled') }}</option>
+                                <option value="driver_cancel_order" {{ $statusValue == 'driver_cancel_order' ? 'selected' : '' }}>{{ __('messages.Driver_Cancelled') }}</option>
+                                <option value="cancel_cron_job" {{ $statusValue == 'cancel_cron_job' ? 'selected' : '' }}>{{ __('messages.Cancelled_Auto') }}</option>
                             </select>
                         </div>
                         <div class="form-group cancel-reason-container" 
-                             style="display: {{ in_array($order->status, ['user_cancel_order', 'driver_cancel_order', 'cancel_cron_job']) ? 'block' : 'none' }};">
+                             style="display: {{ in_array($statusValue, ['user_cancel_order', 'driver_cancel_order', 'cancel_cron_job']) ? 'block' : 'none' }};">
                             <label for="reason_for_cancel">{{ __('messages.Cancellation_Reason') }}</label>
                             <textarea class="form-control" id="reason_for_cancel" name="reason_for_cancel" rows="2">{{ $order->reason_for_cancel }}</textarea>
                         </div>
@@ -111,7 +114,7 @@
                 </div>
             </div>
 
-            @if(in_array($order->status, ['user_cancel_order', 'driver_cancel_order', 'cancel_cron_job']) && $order->reason_for_cancel)
+            @if(in_array($statusValue, ['user_cancel_order', 'driver_cancel_order', 'cancel_cron_job']) && $order->reason_for_cancel)
             <div class="alert alert-danger mt-3">
                 <strong>{{ __('messages.Cancellation_Reason') }}:</strong> {{ $order->reason_for_cancel }}
             </div>
@@ -424,15 +427,15 @@
                                             <strong>{{ __('messages.Payment_Method') }}</strong>
                                             <div class="mt-1">
                                                 <span class="badge badge-primary px-3 py-2">
-                                                    {{ __(ucfirst($order->payment_method)) }}
+                                                    {{ __(ucfirst($paymentMethod)) }}
                                                 </span>
                                             </div>
                                         </div>
                                         <div class="col-md-6 text-right">
                                             <strong>{{ __('messages.Payment_Status') }}</strong>
                                             <div class="mt-1">
-                                                <span class="badge px-3 py-2 {{ $order->status_payment == 'paid' ? 'badge-success' : 'badge-warning' }}">
-                                                    {{ __(ucfirst($order->status_payment)) }}
+                                                <span class="badge px-3 py-2 {{ $paymentStatus == 'paid' ? 'badge-success' : 'badge-warning' }}">
+                                                    {{ __(ucfirst($paymentStatus)) }}
                                                 </span>
                                             </div>
                                         </div>
@@ -448,8 +451,8 @@
                             <div class="form-group">
                                 <label for="status_payment">{{ __('messages.Update_Payment_Status') }}</label>
                                 <select class="form-control" id="status_payment" name="status_payment">
-                                    <option value="pending" {{ $order->status_payment == 'pending' ? 'selected' : '' }}>{{ __('messages.Pending') }}</option>
-                                    <option value="paid" {{ $order->status_payment == 'paid' ? 'selected' : '' }}>{{ __('messages.Paid') }}</option>
+                                    <option value="pending" {{ $paymentStatus == 'pending' ? 'selected' : '' }}>{{ __('messages.Pending') }}</option>
+                                    <option value="paid" {{ $paymentStatus == 'paid' ? 'selected' : '' }}>{{ __('messages.Paid') }}</option>
                                 </select>
                             </div>
                             <button type="submit" class="btn btn-primary">
