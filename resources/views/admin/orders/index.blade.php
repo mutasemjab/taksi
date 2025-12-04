@@ -190,7 +190,7 @@
                             <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
                                 {{ __('messages.Total_Revenue') }}</div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">
-                                ${{ number_format($orders->where('status', 'delivered')->sum('total_price_after_discount'), 2) }}
+                               JD {{ number_format($orders->where('status', 'delivered')->sum('total_price_after_discount'), 2) }}
                             </div>
                         </div>
                         <div class="col-auto">
@@ -286,19 +286,19 @@
                                 <div class="price-info">
                                     @if($order->discount_value > 0)
                                     <div class="text-muted">
-                                        <small><s>${{ number_format($order->total_price_before_discount, 2) }}</s></small>
+                                        <small><s>JD {{ number_format($order->total_price_before_discount, 2) }}</s></small>
                                     </div>
                                     <div class="text-success font-weight-bold">
-                                        ${{ number_format($order->total_price_after_discount, 2) }}
+                                        JD {{ number_format($order->total_price_after_discount, 2) }}
                                     </div>
                                     <div>
                                         <span class="badge badge-warning">
-                                            -${{ number_format($order->discount_value, 2) }} ({{ $order->getDiscountPercentage() }}%)
+                                            -JD {{ number_format($order->discount_value, 2) }} ({{ $order->getDiscountPercentage() }}%)
                                         </span>
                                     </div>
                                     @else
                                     <div class="text-success font-weight-bold">
-                                        ${{ number_format($order->total_price_after_discount, 2) }}
+                                        JD {{ number_format($order->total_price_after_discount, 2) }}
                                     </div>
                                     @endif
                                 </div>
@@ -306,10 +306,10 @@
                             <td>
                                 <div class="commission-info">
                                     <div class="text-primary">
-                                        <small>{{ __('messages.Driver') }}: ${{ number_format($order->net_price_for_driver, 2) }}</small>
+                                        <small>{{ __('messages.Driver') }}: JD {{ number_format($order->net_price_for_driver, 2) }}</small>
                                     </div>
                                     <div class="text-info">
-                                        <small>{{ __('messages.Admin') }}: ${{ number_format($order->commision_of_admin, 2) }}</small>
+                                        <small>{{ __('messages.Admin') }}: JD {{ number_format($order->commision_of_admin, 2) }}</small>
                                     </div>
                                 </div>
                             </td>
@@ -453,13 +453,13 @@
     });
 
     function updateOrderStatus(orderId) {
-        $('#statusUpdateForm').attr('action', `/admin/orders/${orderId}/status`);
+        $('#statusUpdateForm').attr('action', `/admin/orders/JD {orderId}/status`);
         $('#statusUpdateModal').modal('show');
     }
 
     function deleteOrder(orderId) {
         if (confirm("{{ __('messages.Delete_Confirm') }}")) {
-            document.getElementById(`delete-form-${orderId}`).submit();
+            document.getElementById(`delete-form-JD {orderId}`).submit();
         }
     }
 
