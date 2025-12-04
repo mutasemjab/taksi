@@ -36,13 +36,16 @@
         <div class="card-header py-3 d-flex justify-content-between align-items-center">
             <h6 class="m-0 font-weight-bold text-primary">{{ __('messages.Order_Status') }}</h6>
             <div>
+                @php
+                    $statusValue = is_object($order->status) ? $order->status->value : $order->status;
+                @endphp
                 <span class="badge badge-lg px-3 py-2
-                    @if($order->status == 'completed') badge-success
-                    @elseif(in_array($order->status, ['user_cancel_order', 'driver_cancel_order', 'cancel_cron_job'])) badge-danger
-                    @elseif($order->status == 'waiting_payment') badge-warning
+                    @if($statusValue == 'completed') badge-success
+                    @elseif(in_array($statusValue, ['user_cancel_order', 'driver_cancel_order', 'cancel_cron_job'])) badge-danger
+                    @elseif($statusValue == 'waiting_payment') badge-warning
                     @else badge-info
                     @endif">
-                    {{ __(ucfirst(str_replace('_', ' ', $order->status))) }}
+                    {{ __(ucfirst(str_replace('_', ' ', $statusValue))) }}
                 </span>
             </div>
         </div>
@@ -50,26 +53,29 @@
             <div class="row">
                 <div class="col-md-8">
                     <!-- Status Timeline -->
+                    @php
+                        $statusValue = is_object($order->status) ? $order->status->value : $order->status;
+                    @endphp
                     <div class="timeline">
-                        <div class="timeline-item {{ $order->status == 'pending' ? 'active' : 'completed' }}">
+                        <div class="timeline-item {{ $statusValue == 'pending' ? 'active' : 'completed' }}">
                             <i class="fas fa-clock"></i> {{ __('messages.Pending') }}
                         </div>
-                        <div class="timeline-item {{ in_array($order->status, ['accepted', 'on_the_way', 'arrived', 'started', 'waiting_payment', 'completed']) ? 'completed' : '' }}">
+                        <div class="timeline-item {{ in_array($statusValue, ['accepted', 'on_the_way', 'arrived', 'started', 'waiting_payment', 'completed']) ? 'completed' : '' }}">
                             <i class="fas fa-check"></i> {{ __('messages.Accepted') }}
                         </div>
-                        <div class="timeline-item {{ in_array($order->status, ['on_the_way', 'arrived', 'started', 'waiting_payment', 'completed']) ? 'completed' : '' }}">
+                        <div class="timeline-item {{ in_array($statusValue, ['on_the_way', 'arrived', 'started', 'waiting_payment', 'completed']) ? 'completed' : '' }}">
                             <i class="fas fa-car"></i> {{ __('messages.On_The_Way') }}
                         </div>
-                        <div class="timeline-item {{ in_array($order->status, ['arrived', 'started', 'waiting_payment', 'completed']) ? 'completed' : '' }}">
+                        <div class="timeline-item {{ in_array($statusValue, ['arrived', 'started', 'waiting_payment', 'completed']) ? 'completed' : '' }}">
                             <i class="fas fa-map-marker-alt"></i> {{ __('messages.Arrived') }}
                         </div>
-                        <div class="timeline-item {{ in_array($order->status, ['started', 'waiting_payment', 'completed']) ? 'completed' : '' }}">
+                        <div class="timeline-item {{ in_array($statusValue, ['started', 'waiting_payment', 'completed']) ? 'completed' : '' }}">
                             <i class="fas fa-play"></i> {{ __('messages.Started') }}
                         </div>
-                        <div class="timeline-item {{ in_array($order->status, ['waiting_payment', 'completed']) ? 'completed' : '' }}">
+                        <div class="timeline-item {{ in_array($statusValue, ['waiting_payment', 'completed']) ? 'completed' : '' }}">
                             <i class="fas fa-credit-card"></i> {{ __('messages.Waiting_Payment') }}
                         </div>
-                        <div class="timeline-item {{ $order->status == 'completed' ? 'completed' : '' }}">
+                        <div class="timeline-item {{ $statusValue == 'completed' ? 'completed' : '' }}">
                             <i class="fas fa-flag-checkered"></i> {{ __('messages.Completed') }}
                         </div>
                     </div>
