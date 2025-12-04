@@ -881,9 +881,9 @@ return [
     // Status Class Methods
     'In_Progress' => 'In Progress',
     'On_Way' => 'On Way',
-    '' => '',
-    '' => '',
-    '' => '',
+    'Order_Status_History' => 'Order Status History',
+    'driver_alerts' => 'Alerts From Driver',
+    'Notify_Nearby' => 'Notify Nearby',
     '' => '',
 ];
 

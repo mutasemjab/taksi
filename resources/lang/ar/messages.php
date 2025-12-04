@@ -919,7 +919,9 @@ return [
     // Status Class Methods
     'In_Progress' => 'قيد التنفيذ',
     'On_Way' => 'في الطريق',
-   "" => "",
+        'Order_Status_History' => 'سجل حالات الاوردر',
+   "driver_alerts" => "ابلاغات القادمة من السائقين",
+     'Notify_Nearby' => 'بلغ القريبين',
    "" => "",
    "" => "",
    "" => "",
