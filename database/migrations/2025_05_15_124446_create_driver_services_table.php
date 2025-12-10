@@ -23,8 +23,7 @@ return new class extends Migration
               // 1 = primary (mandatory, can't be disabled by driver)
             // 2 = optional (driver can toggle on/off)
             // Note: If a service is not in driver_services table at all, it's "unavailable"
-            $table->tinyInteger('service_type')->default(2)->after('service_id')
-                ->comment('1=primary(mandatory), 2=optional(can toggle)');
+            $table->tinyInteger('service_type')->default(2)->comment('1=primary(mandatory), 2=optional(can toggle)');
             $table->timestamps();
         });
     }
