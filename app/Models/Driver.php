@@ -92,11 +92,27 @@ class Driver extends Authenticatable
             ->withTimestamps();
     }
 
-       public function services()
+   public function services()
     {
         return $this->belongsToMany(Service::class, 'driver_services')
-            ->withPivot('status')
-            ->withTimestamps();
+                    ->withPivot('status', 'service_type')
+                    ->withTimestamps();
+    }
+
+    public function primaryServices()
+    {
+        return $this->belongsToMany(Service::class, 'driver_services')
+                    ->wherePivot('service_type', 1)
+                    ->withPivot('status', 'service_type')
+                    ->withTimestamps();
+    }
+
+    public function optionalServices()
+    {
+        return $this->belongsToMany(Service::class, 'driver_services')
+                    ->wherePivot('service_type', 2)
+                    ->withPivot('status', 'service_type')
+                    ->withTimestamps();
     }
 
     public function activeServices()
