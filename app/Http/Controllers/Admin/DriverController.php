@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Driver;
+use App\Models\DriverBan;
 use App\Models\Option;
 use App\Models\Service;
 use App\Models\WalletTransaction;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -381,5 +383,110 @@ class DriverController extends Controller
     {
         $driver = Driver::with('walletTransactions')->where('id', $id)->first();
         return view('admin.drivers.transactions', compact('driver'));
+    }
+
+     public function banForm($id)
+    {
+        $driver = Driver::findOrFail($id);
+        $banReasons = DriverBan::BAN_REASONS;
+        
+        return view('admin.drivers.ban', compact('driver', 'banReasons'));
+    }
+
+    /**
+     * Ban a driver
+     */
+    public function ban(Request $request, $id)
+    {
+        $driver = Driver::findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'ban_reason' => 'required|string',
+            'ban_description' => 'nullable|string',
+            'ban_type' => 'required|in:temporary,permanent',
+            'ban_duration' => 'required_if:ban_type,temporary|nullable|integer|min:1',
+            'ban_duration_unit' => 'required_if:ban_type,temporary|nullable|in:hours,days,weeks,months',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()
+                ->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        DB::beginTransaction();
+        try {
+            $banUntil = null;
+            $isPermanent = $request->ban_type === 'permanent';
+
+            if (!$isPermanent) {
+                $duration = $request->ban_duration;
+                $unit = $request->ban_duration_unit;
+
+                $banUntil = match($unit) {
+                    'hours' => Carbon::now()->addHours($duration),
+                    'days' => Carbon::now()->addDays($duration),
+                    'weeks' => Carbon::now()->addWeeks($duration),
+                    'months' => Carbon::now()->addMonths($duration),
+                    default => Carbon::now()->addDays($duration),
+                };
+            }
+
+            // Ban the driver
+            $driver->banDriver(
+                auth()->guard('admin')->user()->id,
+                $request->ban_reason,
+                $request->ban_description,
+                $banUntil,
+                $isPermanent
+            );
+
+            DB::commit();
+            return redirect()->route('drivers.index')
+                ->with('success', 'Driver banned successfully');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()
+                ->with('error', 'Something went wrong: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Unban a driver
+     */
+    public function unban(Request $request, $id)
+    {
+        $driver = Driver::findOrFail($id);
+
+        $request->validate([
+            'unban_reason' => 'nullable|string|max:500',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $driver->unbanDriver(
+                auth()->guard('admin')->user()->id,
+                $request->unban_reason
+            );
+
+            DB::commit();
+            return redirect()->route('drivers.index')
+                ->with('success', 'Driver unbanned successfully');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()
+                ->with('error', 'Something went wrong: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Show ban history
+     */
+    public function banHistory($id)
+    {
+        $driver = Driver::with('bans.admin', 'bans.unbannedByAdmin')->findOrFail($id);
+        
+        return view('admin.drivers.ban-history', compact('driver'));
     }
 }

@@ -60,7 +60,52 @@ class HomeDriverController extends Controller
             'today_statistics' => $todayStats
         ];
         
+        // Add ban information if driver is banned
+        if ($driver->activate == 2) {
+            $responseData['ban_info'] = $this->getBanInfo($driver);
+        }
+        
         return $this->success_response('Home data retrieved successfully', $responseData);
+    }
+    
+    /**
+     * Get ban information for the driver
+     */
+    private function getBanInfo($driver)
+    {
+        $activeBan = $driver->activeBan;
+        
+        if (!$activeBan) {
+            return [
+                'is_banned' => true,
+                'message' => 'Your account has been banned.',
+                'message_ar' => 'تم حظر حسابك.',
+            ];
+        }
+
+        $banInfo = [
+            'is_banned' => true,
+            'is_permanent' => $activeBan->is_permanent,
+            'reason' => $activeBan->ban_reason,
+            'reason_text' => $activeBan->getReasonText(),
+            'description' => $activeBan->ban_description,
+            'banned_at' => $activeBan->banned_at->toDateTimeString(),
+            'banned_by' => $activeBan->admin ? $activeBan->admin->name : 'System',
+            'message' => 'Your account has been banned. You can only view information and withdraw your balance.',
+            'message_ar' => 'تم حظر حسابك. يمكنك فقط عرض المعلومات وسحب رصيدك.',
+        ];
+
+        if (!$activeBan->is_permanent && $activeBan->ban_until) {
+            $banInfo['ban_until'] = $activeBan->ban_until->toDateTimeString();
+            $banInfo['remaining_time'] = $activeBan->getRemainingTime();
+            $banInfo['remaining_time_human'] = $activeBan->ban_until->diffForHumans();
+        } else {
+            $banInfo['ban_until'] = null;
+            $banInfo['remaining_time'] = 'Permanent';
+            $banInfo['remaining_time_human'] = 'Permanent ban';
+        }
+
+        return $banInfo;
     }
     
     /**
