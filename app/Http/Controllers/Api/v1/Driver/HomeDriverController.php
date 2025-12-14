@@ -95,16 +95,16 @@ class HomeDriverController extends Controller
             'is_banned' => true,
             'is_permanent' => $activeBan->is_permanent,
             'reason' => $activeBan->ban_reason,
-            'reason_text' => $activeBan->getReasonText(),
+            'reason_text' => $activeBan->getReasonText($lang),
             'description' => $activeBan->ban_description,
             'banned_at' => $activeBan->banned_at->toDateTimeString(),
-            'banned_by' => $activeBan->admin ? $activeBan->admin->name : 'System',
+            'banned_by' => $activeBan->admin ? $activeBan->admin->name : ($lang === 'ar' ? 'النظام' : 'System'),
             'message' => $message,
         ];
 
         if (!$activeBan->is_permanent && $activeBan->ban_until) {
             $banInfo['ban_until'] = $activeBan->ban_until->toDateTimeString();
-            $banInfo['remaining_time'] = $activeBan->getRemainingTime();
+            $banInfo['remaining_time'] = $activeBan->getRemainingTime($lang);
             $banInfo['remaining_time_human'] = $activeBan->ban_until->diffForHumans();
         } else {
             $banInfo['ban_until'] = null;

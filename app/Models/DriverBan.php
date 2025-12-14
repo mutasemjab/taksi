@@ -11,16 +11,46 @@ class DriverBan extends Model
     use HasFactory;
 
     const BAN_REASONS = [
-        'violation_terms' => 'Violation of Terms and Conditions',
-        'poor_behavior' => 'Poor Behavior with Passengers',
-        'fraud' => 'Fraudulent Activity',
-        'multiple_complaints' => 'Multiple Customer Complaints',
-        'safety_issues' => 'Safety Violations',
-        'document_fraud' => 'Fraudulent Documents',
-        'license_expired' => 'Expired License',
-        'vehicle_issues' => 'Vehicle Safety Issues',
-        'unprofessional_conduct' => 'Unprofessional Conduct',
-        'other' => 'Other',
+        'violation_terms' => [
+            'en' => 'Violation of Terms and Conditions',
+            'ar' => 'انتهاك الشروط والأحكام'
+        ],
+        'poor_behavior' => [
+            'en' => 'Poor Behavior with Passengers',
+            'ar' => 'سلوك سيء مع الركاب'
+        ],
+        'fraud' => [
+            'en' => 'Fraudulent Activity',
+            'ar' => 'نشاط احتيالي'
+        ],
+        'multiple_complaints' => [
+            'en' => 'Multiple Customer Complaints',
+            'ar' => 'شكاوى متعددة من العملاء'
+        ],
+        'safety_issues' => [
+            'en' => 'Safety Violations',
+            'ar' => 'انتهاكات السلامة'
+        ],
+        'document_fraud' => [
+            'en' => 'Fraudulent Documents',
+            'ar' => 'مستندات مزورة'
+        ],
+        'license_expired' => [
+            'en' => 'Expired License',
+            'ar' => 'رخصة منتهية الصلاحية'
+        ],
+        'vehicle_issues' => [
+            'en' => 'Vehicle Safety Issues',
+            'ar' => 'مشاكل سلامة المركبة'
+        ],
+        'unprofessional_conduct' => [
+            'en' => 'Unprofessional Conduct',
+            'ar' => 'سلوك غير مهني'
+        ],
+        'other' => [
+            'en' => 'Other',
+            'ar' => 'أخرى'
+        ],
     ];
 
     protected $fillable = [
@@ -82,46 +112,49 @@ class DriverBan extends Model
     /**
      * Get ban status text
      */
-    public function getStatusText()
+    public function getStatusText($lang = 'en')
     {
         if (!$this->is_active) {
-            return 'Lifted';
+            return $lang === 'ar' ? 'تم الرفع' : 'Lifted';
         }
 
         if ($this->is_permanent) {
-            return 'Permanent';
+            return $lang === 'ar' ? 'دائم' : 'Permanent';
         }
 
         if ($this->isExpired()) {
-            return 'Expired';
+            return $lang === 'ar' ? 'منتهي' : 'Expired';
         }
 
-        return 'Active';
+        return $lang === 'ar' ? 'نشط' : 'Active';
     }
 
     /**
      * Get ban reason text
      */
-    public function getReasonText()
+    public function getReasonText($lang = 'en')
     {
-        return self::BAN_REASONS[$this->ban_reason] ?? $this->ban_reason;
+        if (isset(self::BAN_REASONS[$this->ban_reason])) {
+            return self::BAN_REASONS[$this->ban_reason][$lang] ?? self::BAN_REASONS[$this->ban_reason]['en'];
+        }
+        return $this->ban_reason;
     }
 
     /**
      * Get remaining ban time
      */
-    public function getRemainingTime()
+    public function getRemainingTime($lang = 'en')
     {
         if ($this->is_permanent) {
-            return 'Permanent';
+            return $lang === 'ar' ? 'دائم' : 'Permanent';
         }
 
         if (!$this->ban_until) {
-            return 'N/A';
+            return $lang === 'ar' ? 'غير متاح' : 'N/A';
         }
 
         if ($this->isExpired()) {
-            return 'Expired';
+            return $lang === 'ar' ? 'منتهي' : 'Expired';
         }
 
         return Carbon::now()->diffForHumans($this->ban_until, true);

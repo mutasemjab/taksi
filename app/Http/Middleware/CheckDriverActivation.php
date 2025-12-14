@@ -61,7 +61,7 @@ class CheckDriverActivation
                 'message' => $message,
                 'status' => 2,
                 'banned' => true,
-                'ban_info' => $this->getBanInfo($user)
+                'ban_info' => $this->getBanInfo($user, $lang),
             ], 403);
         }
 
@@ -93,7 +93,7 @@ class CheckDriverActivation
     /**
      * Get ban information for the driver
      */
-    protected function getBanInfo($driver)
+   protected function getBanInfo($driver, $lang = 'en')
     {
         $activeBan = $driver->activeBan;
         
@@ -104,14 +104,14 @@ class CheckDriverActivation
         $banInfo = [
             'is_permanent' => $activeBan->is_permanent,
             'reason' => $activeBan->ban_reason,
-            'reason_text' => $activeBan->getReasonText(),
+            'reason_text' => $activeBan->getReasonText($lang),
             'description' => $activeBan->ban_description,
             'banned_at' => $activeBan->banned_at->toDateTimeString(),
         ];
 
         if (!$activeBan->is_permanent && $activeBan->ban_until) {
             $banInfo['ban_until'] = $activeBan->ban_until->toDateTimeString();
-            $banInfo['remaining_time'] = $activeBan->getRemainingTime();
+            $banInfo['remaining_time'] = $activeBan->getRemainingTime($lang);
         }
 
         return $banInfo;
