@@ -27,11 +27,15 @@ class CheckDriverActivation
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
+        // Get language from header (default to 'en')
+        $lang = $request->header('lang', 'en');
+
         // Check for waiting approval (activate = 3) - completely blocked
         if ($user->activate == 3) {
+            $message = $lang === 'ar' ? 'في انتظار الموافقة' : 'Waiting for approval';
+            
             return response()->json([
-                'message' => 'Waiting for approval',
-                'message_ar' => 'في انتظار الموافقة',
+                'message' => $message,
                 'status' => 3
             ], 403);
         }
@@ -49,9 +53,12 @@ class CheckDriverActivation
             }
             
             // Block all other non-GET requests
+            $message = $lang === 'ar' 
+                ? 'تم حظر حسابك. يمكنك فقط عرض المعلومات وسحب رصيدك.' 
+                : 'Your account has been banned. You can only view information and withdraw your balance.';
+            
             return response()->json([
-                'message' => 'Your account has been banned. You can only view information and withdraw your balance.',
-                'message_ar' => 'تم حظر حسابك. يمكنك فقط عرض المعلومات وسحب رصيدك.',
+                'message' => $message,
                 'status' => 2,
                 'banned' => true,
                 'ban_info' => $this->getBanInfo($user)

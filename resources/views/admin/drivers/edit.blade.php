@@ -268,8 +268,30 @@
 
 @section('script')
 <script>
-    // Show image previews
     $(document).ready(function() {
+        // Function to update optional services based on primary selection
+        function updateOptionalServices() {
+            const primaryServiceId = $('select[name="primary_service_id"]').val();
+            
+            // Enable all optional service checkboxes first
+            $('input[name="optional_service_ids[]"]').prop('disabled', false);
+            
+            // Disable and uncheck the selected primary service in optional services
+            if (primaryServiceId) {
+                $('input[name="optional_service_ids[]"][value="' + primaryServiceId + '"]')
+                    .prop('disabled', true)
+                    .prop('checked', false);
+            }
+        }
+        
+        // Run on page load
+        updateOptionalServices();
+        
+        // Run when primary service changes
+        $('select[name="primary_service_id"]').on('change', function() {
+            updateOptionalServices();
+        });
+        
         // Show filename on file select
         $('.custom-file-input').on('change', function() {
             let fileName = $(this).val().split('\\').pop();
