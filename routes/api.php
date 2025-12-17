@@ -37,6 +37,7 @@ Route::middleware('auth:api')->get('/user', function (Request $request) {
 
 //Route unAuth
 Route::group(['prefix' => 'v1/user'], function () {
+    Route::get('/country-charges', [CountryChargeApiController::class, 'index']);
 
     //---------------- Auth --------------------//
     Route::get('/banners', [BannerController::class, 'index']);
