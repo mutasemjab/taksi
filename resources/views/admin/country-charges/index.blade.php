@@ -14,7 +14,23 @@
                     @endcan
                 </div>
                 <div class="card-body">
-                  
+                    @if(session('success'))
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            {{ session('success') }}
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                    @endif
+
+                    @if(session('error'))
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            {{ session('error') }}
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                    @endif
 
                     <div class="table-responsive">
                         <table class="table table-bordered table-hover">
@@ -66,47 +82,6 @@
                                             @endcan
                                         </td>
                                     </tr>
-
-                                    <!-- View Modal -->
-                                    <div class="modal fade" id="viewModal{{ $countryCharge->id }}" tabindex="-1">
-                                        <div class="modal-dialog modal-lg">
-                                            <div class="modal-content">
-                                                <div class="modal-header">
-                                                    <h5 class="modal-title">{{ $countryCharge->name }} - {{ __('messages.Charge Data') }}</h5>
-                                                    <button type="button" class="close" data-dismiss="modal">
-                                                        <span>&times;</span>
-                                                    </button>
-                                                </div>
-                                                <div class="modal-body">
-                                                    <table class="table table-sm table-bordered">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>#</th>
-                                                                <th>{{ __('messages.Name') }}</th>
-                                                                <th>{{ __('messages.Phone') }}</th>
-                                                                <th>{{ __('messages.Cliq Name') }}</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            @foreach($countryCharge->chargeData as $data)
-                                                                <tr>
-                                                                    <td>{{ $loop->iteration }}</td>
-                                                                    <td>{{ $data->name }}</td>
-                                                                    <td>{{ $data->phone }}</td>
-                                                                    <td>{{ $data->cliq_name }}</td>
-                                                                </tr>
-                                                            @endforeach
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                                                        {{ __('messages.Close') }}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
                                 @empty
                                     <tr>
                                         <td colspan="5" class="text-center">
@@ -126,4 +101,50 @@
         </div>
     </div>
 </div>
+
+<!-- Modals Section - Outside the table -->
+@foreach($countryCharges as $countryCharge)
+    <div class="modal fade" id="viewModal{{ $countryCharge->id }}" tabindex="-1" role="dialog" aria-labelledby="viewModalLabel{{ $countryCharge->id }}" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="viewModalLabel{{ $countryCharge->id }}">{{ $countryCharge->name }} - {{ __('messages.Charge Data') }}</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>{{ __('messages.Name') }}</th>
+                                    <th>{{ __('messages.Phone') }}</th>
+                                    <th>{{ __('messages.Cliq Name') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($countryCharge->chargeData as $data)
+                                    <tr>
+                                        <td>{{ $loop->iteration }}</td>
+                                        <td>{{ $data->name }}</td>
+                                        <td>{{ $data->phone }}</td>
+                                        <td>{{ $data->cliq_name }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                        {{ __('messages.Close') }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+@endforeach
+
 @endsection
