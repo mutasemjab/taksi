@@ -247,6 +247,16 @@
                         </a>
                     </li>
                 @endcanany
+                
+                @canany(['countryCharge-table', 'countryCharge-add', 'countryCharge-edit', 'countryCharge-delete'])
+                    <li class="nav-item">
+                        <a href="{{ route('country-charges.index') }}"
+                            class="nav-link {{ request()->routeIs('country-charges.index') ? 'active' : '' }}">
+                            <i class="nav-icon fas fa-credit-card"></i>
+                            <p>{{ __('messages.Country Charges') }}</p>
+                        </a>
+                    </li>
+                @endcanany
 
                 <!-- Reports Section -->
                 <li class="nav-item {{ request()->is('admin/reports*') ? 'menu-open' : '' }}">
