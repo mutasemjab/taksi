@@ -121,7 +121,7 @@
                                     <th>#</th>
                                     <th>{{ __('messages.Name') }}</th>
                                     <th>{{ __('messages.Phone') }}</th>
-                                    <th>{{ __('messages.service_provider') }}</th>
+                                    <th>{{ __('messages.Service_provider') }}</th>
                                     <th>{{ __('messages.Cliq Name') }}</th>
                                 </tr>
                             </thead>
