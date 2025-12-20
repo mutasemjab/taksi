@@ -347,6 +347,15 @@ class OrderController extends Controller
                     ]);
                 }
 
+                Log::info('Order Created Successfully', [
+                        'order_id' => $order->id,
+                        'order_number' => $order->number,
+                        'user_id' => auth()->id(),
+                        'final_price' => $finalPrice,
+                        'payment_method' => $paymentMethodValue,
+                    ]);
+
+
                 DB::commit();
 
                 // Get initial search radius from settings
