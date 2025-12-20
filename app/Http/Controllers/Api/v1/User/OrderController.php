@@ -288,6 +288,24 @@ class OrderController extends Controller
                 $couponId = $coupon->id;
             }
 
+            // **NEW: Check wallet balance for wallet payment method**
+            // Assuming PaymentMethod::Wallet exists in your enum
+            if ($paymentMethodValue === PaymentMethod::Wallet->value) {
+                $user = auth()->user();
+                
+                if ($user->balance < $finalPrice) {
+                    return response()->json([
+                        'status' => false,
+                        'type' => 'insufficient_balance',
+                        'message' => 'Insufficient wallet balance',
+                        'data' => [
+                            'required_amount' => $finalPrice,
+                            'current_balance' => $user->balance,
+                            'shortage' => $finalPrice - $user->balance
+                        ]
+                    ], 200);
+                }
+            }
             // Use DB transaction to ensure data consistency
             DB::beginTransaction();
 
