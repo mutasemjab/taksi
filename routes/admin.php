@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\CardController;
 use App\Http\Controllers\Admin\CardNumberController;
@@ -79,6 +80,11 @@ Route::group(['prefix' => LaravelLocalization::setLocale(), 'middleware' => ['lo
         Route::get('/permissions/{guard_name}', function ($guard_name) {
             return response()->json(Permission::where('guard_name', $guard_name)->get());
         });
+
+        Route::get('activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
+
+        // View logs for specific model instance
+        Route::get('activity-logs/{modelClass}/{modelId}', [ActivityLogController::class, 'show'])->name('activity-logs.show');
 
 
 
