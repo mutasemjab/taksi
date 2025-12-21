@@ -279,7 +279,7 @@
         const indicator = document.getElementById('refreshIndicator');
         indicator.classList.add('active');
         
-        fetch('{{ route("admin.drivers.map.locations") }}')
+        fetch('{{ route("map.locations") }}')
             .then(response => response.json())
             .then(data => {
                 if (data.success) {

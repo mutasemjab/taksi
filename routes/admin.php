@@ -83,8 +83,12 @@ Route::group(['prefix' => LaravelLocalization::setLocale(), 'middleware' => ['lo
         });
 
         Route::get('activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
-        Route::get('map/driver', [DriverMapController::class, 'index'])->name('map.index');
-
+        Route::get('/map', [App\Http\Controllers\Admin\DriverMapController::class, 'index'])
+            ->name('map');
+        Route::get('/map/locations', [App\Http\Controllers\Admin\DriverMapController::class, 'getDriverLocations'])
+            ->name('map.locations');
+        Route::get('/map/driver/{id}', [App\Http\Controllers\Admin\DriverMapController::class, 'getDriverLocation'])
+            ->name('map.driver');
         // View logs for specific model instance
         Route::get('activity-logs/{modelClass}/{modelId}', [ActivityLogController::class, 'show'])->name('activity-logs.show');
 
