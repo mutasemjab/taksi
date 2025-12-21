@@ -2,7 +2,7 @@
 
 @section('title', __('messages.live_map'))
 
-@section('styles')
+@section('css')
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
     #driverMap {
@@ -190,7 +190,7 @@
 </div>
 @endsection
 
-@section('scripts')
+@section('script')
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
     let map;
