@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\CardController;
 use App\Http\Controllers\Admin\CardNumberController;
 use App\Http\Controllers\Admin\CouponController;
@@ -66,6 +67,7 @@ Route::group(['prefix' => LaravelLocalization::setLocale(), 'middleware' => ['lo
         /*         end  update login admin                */
 
         /// Role and permission
+        Route::resource('admin', AdminController::class, ['as' => 'admin']);
         Route::resource('employee', 'App\Http\Controllers\Admin\EmployeeController', ['as' => 'admin']);
         Route::get('role', 'App\Http\Controllers\Admin\RoleController@index')->name('admin.role.index');
         Route::get('role/create', 'App\Http\Controllers\Admin\RoleController@create')->name('admin.role.create');
