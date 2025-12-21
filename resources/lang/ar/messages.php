@@ -1186,4 +1186,6 @@ return [
   'Something went wrong' => 'حدث خطأ ما',
 
   'success' => 'تمت العملية بنجاح',
+      'service_provider' => 'مزود الخدمة',
+  'Enter service_provider' => 'ادخل مزود الخدمة',
 ];

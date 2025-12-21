@@ -1152,4 +1152,6 @@ return [
   'Something went wrong' => 'Something went wrong',
 
   'success' => 'Operation completed successfully',
+    'service_provider' => 'Service provider',
+  'Enter service_provider' => 'Enter Service provider',
 ];
