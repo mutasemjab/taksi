@@ -4,6 +4,7 @@
 
 @section('css')
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
 <style>
     #driverMap {
         height: 600px;
@@ -89,7 +90,6 @@
         50% { opacity: 0.5; }
     }
     
-    /* Custom marker styles */
     .driver-marker {
         background-color: #28a745;
         border: 3px solid white;
@@ -116,6 +116,7 @@
     .driver-popup .driver-info {
         font-size: 14px;
         color: #666;
+        margin: 5px 0;
     }
     
     .status-badge {
@@ -192,7 +193,16 @@
 
 @section('script')
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
 <script>
+    // Configure Toastr
+    toastr.options = {
+        "closeButton": true,
+        "progressBar": true,
+        "positionClass": "toast-top-right",
+        "timeOut": "3000"
+    };
+
     let map;
     let markers = {};
     let refreshInterval;
@@ -200,13 +210,11 @@
     
     // Initialize map
     function initMap() {
-        // Default center (you can change this to your preferred location)
         const defaultLat = 31.9454; // Amman, Jordan
         const defaultLng = 35.9284;
         
         map = L.map('driverMap').setView([defaultLat, defaultLng], 12);
         
-        // Add tile layer (OpenStreetMap)
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 19,
@@ -226,13 +234,13 @@
     // Create popup content
     function createPopupContent(driver) {
         const statusClass = driver.status === 'online' ? 'online' : 'offline';
-        const statusText = driver.status === 'online' ? '{{ __("drivers.online") }}' : '{{ __("drivers.offline") }}';
+        const statusText = driver.status === 'online' ? '{{ __("messages.online") }}' : '{{ __("messages.offline") }}';
         
         return `
             <div class="driver-popup">
                 <div class="driver-name">${driver.name}</div>
                 <div class="driver-info">
-                    <i class="fas fa-phone"></i> ${driver.phone || '{{ __("drivers.no_phone") }}'}
+                    <i class="fas fa-phone"></i> ${driver.phone || '{{ __("messages.no_phone") }}'}
                 </div>
                 <div class="driver-info">
                     <i class="fas fa-wallet"></i> {{ __('messages.balance') }}: ${driver.balance} {{ __('messages.currency') }}
@@ -297,14 +305,16 @@
                         map.fitBounds(group.getBounds().pad(0.1));
                         map._initialFit = true;
                     }
+                    
+                    toastr.success('{{ __("messages.map_updated") }}');
                 } else {
                     console.error('Error fetching driver locations:', data.message);
-                    toastr.error('{{ __("drivers.error_loading_locations") }}');
+                    toastr.error(data.message || '{{ __("messages.error_loading_locations") }}');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                toastr.error('{{ __("drivers.error_loading_locations") }}');
+                toastr.error('{{ __("messages.error_loading_locations") }}');
             })
             .finally(() => {
                 indicator.classList.remove('active');
@@ -316,8 +326,9 @@
         if (Object.keys(markers).length > 0) {
             const group = new L.featureGroup(Object.values(markers));
             map.fitBounds(group.getBounds().pad(0.1));
+            toastr.info('{{ __("messages.map_centered") }}');
         } else {
-            toastr.info('{{ __("drivers.no_drivers_to_center") }}');
+            toastr.info('{{ __("messages.no_drivers_to_center") }}');
         }
     }
     
