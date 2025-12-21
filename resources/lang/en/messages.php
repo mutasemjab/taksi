@@ -1154,4 +1154,6 @@ return [
   'success' => 'Operation completed successfully',
     'service_provider' => 'Service provider',
   'Enter service_provider' => 'Enter Service provider',
+  'No_criminal_record' => 'No criminal record',
+  'Activity Logs' => 'Activity Logs',
 ];

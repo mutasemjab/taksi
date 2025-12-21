@@ -1188,4 +1188,6 @@ return [
   'success' => 'تمت العملية بنجاح',
       'service_provider' => 'مزود الخدمة',
   'Enter service_provider' => 'ادخل مزود الخدمة',
+    'No_criminal_record' => 'عدم محكومية',
+  'Activity Logs' => 'سجل نشاطات النظام',
 ];
