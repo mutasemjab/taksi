@@ -1,5 +1,3 @@
-
-
 <?php $__env->startSection('title', __('messages.Orders')); ?>
 
 <?php $__env->startSection('content'); ?>
@@ -20,7 +18,7 @@
             <h6 class="m-0 font-weight-bold text-primary"><?php echo e(__('messages.Filter_Orders')); ?></h6>
         </div>
         <div class="card-body">
-            <form action="<?php echo e(route('orders.filter')); ?>" method="GET">
+            <form action="<?php echo e(route('orders.index')); ?>" method="GET">
                 <div class="row">
                     <div class="col-md-3">
                         <div class="form-group">
