@@ -229,7 +229,9 @@ class AuthController extends Controller
         }
 
         if ($validator->fails()) {
-            return $this->error_response('Validation error', $validator->errors());
+        // Get first validation error message (will be in the locale set above)
+            $errorMessage = $validator->errors()->first();
+            return $this->error_response($errorMessage, null, 422);
         }
 
         try {
