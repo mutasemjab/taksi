@@ -8,9 +8,9 @@
             <tr>
                 <th><?php echo e(__('messages.ID')); ?></th>
                 <th><?php echo e(__('messages.Driver')); ?></th>
-                <th><?php echo e(__('messages.Report')); ?></th>
-                <th><?php echo e(__('messages.Lat')); ?></th>
-                <th><?php echo e(__('messages.Lng')); ?></th>
+                <th><?php echo e(__('messages.Reason')); ?></th>
+                <th><?php echo e(__('messages.Latitude')); ?></th>
+                <th><?php echo e(__('messages.Longitude')); ?></th>
                 <th><?php echo e(__('messages.address')); ?></th>
                 <th><?php echo e(__('messages.Note')); ?></th>
                 <th><?php echo e(__('messages.Status')); ?></th>

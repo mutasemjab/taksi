@@ -31,11 +31,10 @@
                         </a>
                     </li>
                 <?php endif; ?>
-                
+
                 <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->check('dashboard-view')): ?>
                     <li class="nav-item">
-                        <a href="<?php echo e(route('map')); ?>"
-                            class="nav-link <?php echo e(request()->routeIs('map') ? 'active' : ''); ?>">
+                        <a href="<?php echo e(route('map')); ?>" class="nav-link <?php echo e(request()->routeIs('map') ? 'active' : ''); ?>">
                             <i class="nav-icon fas fa-tachometer-alt"></i>
                             <p><?php echo e(__('messages.live_map')); ?></p>
                         </a>
@@ -44,7 +43,8 @@
 
                 <!-- User Management Section -->
                 <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->any(['user-table', 'user-add', 'user-edit', 'user-delete', 'driver-table', 'driver-add',
-                    'driver-edit', 'driver-delete', 'representive-table', 'representive-add', 'representive-edit', 'representive-delete'])): ?>
+                    'driver-edit', 'driver-delete', 'representive-table', 'representive-add', 'representive-edit',
+                    'representive-delete'])): ?>
                     <li
                         class="nav-item <?php echo e(request()->is('admin/users*') || request()->is('admin/drivers*') ? 'menu-open' : ''); ?>">
                         <a href="#" class="nav-link">
@@ -274,8 +274,10 @@
                 <?php endif; ?>
 
                 <!-- Reports Section -->
-                <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->any(['report-table', 'report-view', 'report-export'])): ?>
-                    <li class="nav-item <?php echo e(request()->is('admin/reports*') ? 'menu-open' : ''); ?>">
+                <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->any(['report-table', 'report-view', 'report-export', 'financial-reports-list',
+                    'financial-reports-export'])): ?>
+                    <li
+                        class="nav-item <?php echo e(request()->is('admin/reports*') || request()->is('admin/financial-reports*') ? 'menu-open' : ''); ?>">
                         <a href="#" class="nav-link">
                             <i class="nav-icon fas fa-chart-bar"></i>
                             <p>
@@ -294,12 +296,47 @@
                                     </a>
                                 </li>
                             <?php endif; ?>
+
+                            <!-- Financial Reports Submenu -->
+                            <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->check('financial-reports-list')): ?>
+                                <li class="nav-item <?php echo e(request()->is('admin/financial-reports*') ? 'menu-open' : ''); ?>">
+                                    <a href="#" class="nav-link">
+                                        <i class="nav-icon fas fa-dollar-sign"></i>
+                                        <p>
+                                            <?php echo e(__('messages.Financial_Reports')); ?>
+
+                                            <i class="right fas fa-angle-left"></i>
+                                        </p>
+                                    </a>
+                                    <ul class="nav nav-treeview">
+                                        <li class="nav-item">
+                                            <a href="<?php echo e(route('financial-reports.index')); ?>"
+                                                class="nav-link <?php echo e(request()->routeIs('financial-reports.index') || request()->routeIs('financial-reports.driver-details') ? 'active' : ''); ?>">
+                                                <i class="fas fa-users nav-icon"></i>
+                                                <p><?php echo e(__('messages.Drivers_Financial_Reports')); ?></p>
+                                            </a>
+                                        </li>
+
+                                        <li class="nav-item">
+                                            <a href="<?php echo e(route('financial-reports.pos-report')); ?>"
+                                                class="nav-link <?php echo e(request()->routeIs('financial-reports.pos-report') ? 'active' : ''); ?>">
+                                                <i class="fas fa-store nav-icon"></i>
+                                                <p><?php echo e(__('messages.POS_Financial_Report')); ?></p>
+                                            </a>
+                                        </li>
+
+                                      
+                                    </ul>
+                                </li>
+                            <?php endif; ?>
                         </ul>
                     </li>
                 <?php endif; ?>
 
                 <!-- System Settings -->
-                <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->any(['admin-table', 'admin-add', 'admin-edit', 'admin-delete', 'app-config-table', 'app-config-add', 'app-config-edit', 'app-config-delete', 'setting-table', 'setting-edit', 'role-table', 'role-add', 'role-edit', 'role-delete', 'employee-table', 'employee-add', 'employee-edit', 'employee-delete'])): ?>
+                <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->any(['admin-table', 'admin-add', 'admin-edit', 'admin-delete', 'app-config-table', 'app-config-add',
+                    'app-config-edit', 'app-config-delete', 'setting-table', 'setting-edit', 'role-table', 'role-add',
+                    'role-edit', 'role-delete', 'employee-table', 'employee-add', 'employee-edit', 'employee-delete'])): ?>
                     <li
                         class="nav-item <?php echo e(request()->is('admin/settings*') || request()->is('admin/admin*') || request()->is('admin/app-configs*') || request()->is('admin/roles*') || request()->is('admin/employees*') ? 'menu-open' : ''); ?>">
                         <a href="#" class="nav-link">
@@ -340,7 +377,7 @@
                                 </li>
                             <?php endif; ?>
 
-                             <?php if(
+                            <?php if(
                                 $user->can('activityLog-table') ||
                                     $user->can('activityLog-add') ||
                                     $user->can('activityLog-edit') ||
