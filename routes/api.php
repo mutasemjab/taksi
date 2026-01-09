@@ -41,7 +41,7 @@ Route::group(['prefix' => 'v1/user'], function () {
     Route::get('/country-charges', [CountryChargeApiController::class, 'index']);
 
     //---------------- Auth --------------------//
-    Route::get('/banners', [BannerController::class, 'index']);
+
     Route::get('/appConfig', [AppConfigController::class, 'appConfig']);
     Route::get('/getOptions', [OptionController::class, 'getOptions']);
     Route::post('/check-phone', [AuthController::class, 'checkPhone']);
@@ -59,6 +59,7 @@ Route::group(['prefix' => 'v1/user'], function () {
     // Auth Route
     Route::group(['middleware' => ['auth:user-api']], function () {
 
+        Route::get('/home', [HomeController::class, 'index']);
         Route::post('/addBalance', [WalletController::class, 'addBalance']);
 
         Route::get('/active', [AuthController::class, 'active']);
