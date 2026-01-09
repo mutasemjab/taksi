@@ -71,9 +71,9 @@ class OrderController extends Controller
         // Calculate statistics BEFORE pagination using the same filtered query
         $statistics = [
             'total_orders' => $query->count(),
-            'completed_orders' => (clone $query)->where('status', 'delivered')->count(),
+            'completed_orders' => (clone $query)->where('status', 'completed')->count(),
             'cancelled_orders' => (clone $query)->whereIn('status', ['user_cancel_order', 'driver_cancel_order', 'cancel_cron_job'])->count(),
-            'total_revenue' => (clone $query)->where('status', 'delivered')->sum('total_price_after_discount'),
+            'total_revenue' => (clone $query)->where('status', 'completed')->sum('commision_of_admin'),
         ];
 
         // Paginate results AFTER calculating statistics
