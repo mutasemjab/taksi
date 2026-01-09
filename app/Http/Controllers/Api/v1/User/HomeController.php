@@ -17,7 +17,7 @@ class HomeController extends Controller
     /**
      * Get home page data including banners, user ban status, and challenges
      */
-    public function index()
+    public function index(Request $request)
     {
         try {
             $user = Auth::guard('user-api')->user();
@@ -26,15 +26,17 @@ class HomeController extends Controller
                 return $this->error_response('Unauthenticated', null, 401);
             }
 
+            // Get language from header (default to 'en')
+            $lang = $request->header('lang', 'en');
+
             // Get banners
-            $banners = Banner::orderBy('created_at', 'asc')
-                ->get();
+            $banners = Banner::orderBy('created_at', 'asc')->get();
 
             // Check user ban status
-            $banStatus = $this->checkUserBanStatus($user);
+            $banStatus = $this->checkUserBanStatus($user, $lang);
 
             // Get active challenges with user progress
-            $challenges = $this->getUserChallenges($user);
+            $challenges = $this->getUserChallenges($user, $lang);
 
             // Get user statistics
             $userStats = $this->getUserStatistics($user);
@@ -66,7 +68,7 @@ class HomeController extends Controller
     /**
      * Get user challenges with progress
      */
-    public function getChallenges()
+    public function getChallenges(Request $request)
     {
         try {
             $user = Auth::guard('user-api')->user();
@@ -75,7 +77,10 @@ class HomeController extends Controller
                 return $this->error_response('Unauthenticated', null, 401);
             }
 
-            $challenges = $this->getUserChallenges($user);
+            // Get language from header (default to 'en')
+            $lang = $request->header('lang', 'en');
+
+            $challenges = $this->getUserChallenges($user, $lang);
 
             return $this->success_response('Challenges retrieved successfully', $challenges);
         } catch (\Exception $e) {
@@ -87,7 +92,7 @@ class HomeController extends Controller
     /**
      * Get specific challenge details with user progress
      */
-    public function getChallengeDetails($id)
+    public function getChallengeDetails(Request $request, $id)
     {
         try {
             $user = Auth::guard('user-api')->user();
@@ -95,6 +100,9 @@ class HomeController extends Controller
             if (!$user) {
                 return $this->error_response('Unauthenticated', null, 401);
             }
+
+            // Get language from header (default to 'en')
+            $lang = $request->header('lang', 'en');
 
             $challenge = Challenge::active()->find($id);
 
@@ -107,19 +115,10 @@ class HomeController extends Controller
 
             $challengeData = [
                 'id' => $challenge->id,
-                'title' => [
-                    'en' => $challenge->title_en,
-                    'ar' => $challenge->title_ar,
-                ],
-                'description' => [
-                    'en' => $challenge->description_en,
-                    'ar' => $challenge->description_ar,
-                ],
+                'title' => $lang === 'ar' ? $challenge->title_ar : $challenge->title_en,
+                'description' => $lang === 'ar' ? $challenge->description_ar : $challenge->description_en,
                 'type' => $challenge->challenge_type,
-                'type_text' => [
-                    'en' => $challenge->getChallengeTypeText('en'),
-                    'ar' => $challenge->getChallengeTypeText('ar'),
-                ],
+                'type_text' => $challenge->getChallengeTypeText($lang),
                 'target_count' => $challenge->target_count,
                 'reward_amount' => $challenge->reward_amount,
                 'icon' => $challenge->icon ? asset('assets/admin/uploads/challenges/' . $challenge->icon) : null,
@@ -148,7 +147,7 @@ class HomeController extends Controller
     /**
      * Check user ban status
      */
-    private function checkUserBanStatus($user)
+    private function checkUserBanStatus($user, $lang = 'en')
     {
         $activeBan = $user->activeBan;
 
@@ -174,28 +173,17 @@ class HomeController extends Controller
         $banInfo = [
             'is_banned' => true,
             'ban_type' => $activeBan->is_permanent ? 'permanent' : 'temporary',
-            'reason' => [
-                'en' => $activeBan->getReasonText('en'),
-                'ar' => $activeBan->getReasonText('ar'),
-            ],
+            'reason' => $activeBan->getReasonText($lang),
             'description' => $activeBan->ban_description,
             'banned_at' => $activeBan->banned_at->format('Y-m-d H:i:s'),
-            'message' => [
-                'en' => $activeBan->is_permanent 
-                    ? 'Your account has been permanently banned. Please contact support.'
-                    : 'Your account is temporarily banned until ' . $activeBan->ban_until->format('Y-m-d H:i'),
-                'ar' => $activeBan->is_permanent 
-                    ? 'تم حظر حسابك بشكل دائم. يرجى التواصل مع الدعم.'
-                    : 'تم حظر حسابك مؤقتاً حتى ' . $activeBan->ban_until->format('Y-m-d H:i'),
-            ],
+            'message' => $activeBan->is_permanent 
+                ? ($lang === 'ar' ? 'تم حظر حسابك بشكل دائم. يرجى التواصل مع الدعم.' : 'Your account has been permanently banned. Please contact support.')
+                : ($lang === 'ar' ? 'تم حظر حسابك مؤقتاً حتى ' . $activeBan->ban_until->format('Y-m-d H:i') : 'Your account is temporarily banned until ' . $activeBan->ban_until->format('Y-m-d H:i')),
         ];
 
         if (!$activeBan->is_permanent) {
             $banInfo['ban_until'] = $activeBan->ban_until->format('Y-m-d H:i:s');
-            $banInfo['remaining_time'] = [
-                'en' => $activeBan->getRemainingTime('en'),
-                'ar' => $activeBan->getRemainingTime('ar'),
-            ];
+            $banInfo['remaining_time'] = $activeBan->getRemainingTime($lang);
         }
 
         return $banInfo;
@@ -204,29 +192,20 @@ class HomeController extends Controller
     /**
      * Get user challenges with progress
      */
-    private function getUserChallenges($user)
+    private function getUserChallenges($user, $lang = 'en')
     {
         $activeChallenges = Challenge::active()->get();
 
-        return $activeChallenges->map(function ($challenge) use ($user) {
+        return $activeChallenges->map(function ($challenge) use ($user, $lang) {
             // Get or create user progress for this challenge
             $progress = $user->getChallengeProgress($challenge->id);
 
             return [
                 'id' => $challenge->id,
-                'title' => [
-                    'en' => $challenge->title_en,
-                    'ar' => $challenge->title_ar,
-                ],
-                'description' => [
-                    'en' => $challenge->description_en,
-                    'ar' => $challenge->description_ar,
-                ],
+                'title' => $lang === 'ar' ? $challenge->title_ar : $challenge->title_en,
+                'description' => $lang === 'ar' ? $challenge->description_ar : $challenge->description_en,
                 'type' => $challenge->challenge_type,
-                'type_text' => [
-                    'en' => $challenge->getChallengeTypeText('en'),
-                    'ar' => $challenge->getChallengeTypeText('ar'),
-                ],
+                'type_text' => $challenge->getChallengeTypeText($lang),
                 'target_count' => $challenge->target_count,
                 'reward_amount' => $challenge->reward_amount,
                 'icon' => $challenge->icon ? asset('assets/admin/uploads/challenges/' . $challenge->icon) : null,
@@ -274,7 +253,7 @@ class HomeController extends Controller
     /**
      * Get user ban history
      */
-    public function getBanHistory()
+    public function getBanHistory(Request $request)
     {
         try {
             $user = Auth::guard('user-api')->user();
@@ -283,26 +262,23 @@ class HomeController extends Controller
                 return $this->error_response('Unauthenticated', null, 401);
             }
 
+            // Get language from header (default to 'en')
+            $lang = $request->header('lang', 'en');
+
             $bans = $user->bans()
                 ->with(['admin', 'unbannedByAdmin'])
                 ->orderBy('created_at', 'desc')
                 ->get()
-                ->map(function ($ban) {
+                ->map(function ($ban) use ($lang) {
                     return [
                         'id' => $ban->id,
-                        'reason' => [
-                            'en' => $ban->getReasonText('en'),
-                            'ar' => $ban->getReasonText('ar'),
-                        ],
+                        'reason' => $ban->getReasonText($lang),
                         'description' => $ban->ban_description,
                         'type' => $ban->is_permanent ? 'permanent' : 'temporary',
                         'banned_at' => $ban->banned_at->format('Y-m-d H:i:s'),
                         'ban_until' => $ban->ban_until ? $ban->ban_until->format('Y-m-d H:i:s') : null,
                         'is_active' => $ban->is_active,
-                        'status' => [
-                            'en' => $ban->getStatusText('en'),
-                            'ar' => $ban->getStatusText('ar'),
-                        ],
+                        'status' => $ban->getStatusText($lang),
                         'unbanned_at' => $ban->unbanned_at ? $ban->unbanned_at->format('Y-m-d H:i:s') : null,
                         'unban_reason' => $ban->unban_reason,
                     ];
@@ -318,7 +294,7 @@ class HomeController extends Controller
     /**
      * Get user challenge history (completed challenges)
      */
-    public function getChallengeHistory()
+    public function getChallengeHistory(Request $request)
     {
         try {
             $user = Auth::guard('user-api')->user();
@@ -327,24 +303,21 @@ class HomeController extends Controller
                 return $this->error_response('Unauthenticated', null, 401);
             }
 
+            // Get language from header (default to 'en')
+            $lang = $request->header('lang', 'en');
+
             $completedChallenges = UserChallengeProgress::where('user_id', $user->id)
                 ->where('times_completed', '>', 0)
                 ->with('challenge')
                 ->orderBy('completed_at', 'desc')
                 ->get()
-                ->map(function ($progress) {
+                ->map(function ($progress) use ($lang) {
                     $challenge = $progress->challenge;
                     return [
                         'challenge_id' => $challenge->id,
-                        'title' => [
-                            'en' => $challenge->title_en,
-                            'ar' => $challenge->title_ar,
-                        ],
+                        'title' => $lang === 'ar' ? $challenge->title_ar : $challenge->title_en,
                         'type' => $challenge->challenge_type,
-                        'type_text' => [
-                            'en' => $challenge->getChallengeTypeText('en'),
-                            'ar' => $challenge->getChallengeTypeText('ar'),
-                        ],
+                        'type_text' => $challenge->getChallengeTypeText($lang),
                         'reward_amount' => $challenge->reward_amount,
                         'times_completed' => $progress->times_completed,
                         'total_rewards_earned' => $challenge->reward_amount * $progress->times_completed,
