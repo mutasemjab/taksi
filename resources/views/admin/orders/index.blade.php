@@ -149,7 +149,7 @@
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
                                 {{ __('messages.Total_Orders') }}</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $orders->total() }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $statistics['total_orders'] }}</div>
                         </div>
                         <div class="col-auto">
                             <i class="fas fa-calendar fa-2x text-gray-300"></i>
@@ -166,7 +166,7 @@
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
                                 {{ __('messages.Completed_Orders') }}</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $orders->where('status', 'completed')->count() }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $statistics['completed_orders'] }}</div>
                         </div>
                         <div class="col-auto">
                             <i class="fas fa-check-circle fa-2x text-gray-300"></i>
@@ -183,7 +183,7 @@
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
                                 {{ __('messages.Cancelled_Orders') }}</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $orders->whereIn('status', ['user_cancel_order', 'driver_cancel_order', 'cancel_cron_job'])->count() }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $statistics['cancelled_orders'] }}</div>
                         </div>
                         <div class="col-auto">
                             <i class="fas fa-times-circle fa-2x text-gray-300"></i>
@@ -201,7 +201,7 @@
                             <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
                                 {{ __('messages.Total_Revenue') }}</div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">
-                               JD {{ number_format($orders->where('status', 'completed')->sum('commision_of_admin'), 2) }}
+                               JD {{ number_format($statistics['total_revenue'], 2) }}
                             </div>
                         </div>
                         <div class="col-auto">

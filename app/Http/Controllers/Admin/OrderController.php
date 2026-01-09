@@ -68,7 +68,15 @@ class OrderController extends Controller
             $query->where('is_hybrid_payment', $request->is_hybrid_payment);
         }
 
-        // Paginate results
+        // Calculate statistics BEFORE pagination using the same filtered query
+        $statistics = [
+            'total_orders' => $query->count(),
+            'completed_orders' => (clone $query)->where('status', 'delivered')->count(),
+            'cancelled_orders' => (clone $query)->whereIn('status', ['user_cancel_order', 'driver_cancel_order', 'cancel_cron_job'])->count(),
+            'total_revenue' => (clone $query)->where('status', 'delivered')->sum('total_price_after_discount'),
+        ];
+
+        // Paginate results AFTER calculating statistics
         $orders = $query->paginate(15)->withQueryString();
 
         // Get users, drivers, and services for filter dropdowns
@@ -76,7 +84,7 @@ class OrderController extends Controller
         $drivers = Driver::select('id', 'name', 'phone', 'email')->get();
         $services = Service::get();
 
-        return view('admin.orders.index', compact('orders', 'users', 'drivers', 'services'));
+        return view('admin.orders.index', compact('orders', 'users', 'drivers', 'services', 'statistics'));
     }
 
     /**
