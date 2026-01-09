@@ -166,7 +166,7 @@
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
                                 {{ __('messages.Completed_Orders') }}</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $orders->where('status', 'delivered')->count() }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $orders->where('status', 'completed')->count() }}</div>
                         </div>
                         <div class="col-auto">
                             <i class="fas fa-check-circle fa-2x text-gray-300"></i>
@@ -201,7 +201,7 @@
                             <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
                                 {{ __('messages.Total_Revenue') }}</div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">
-                               JD {{ number_format($orders->where('status', 'delivered')->sum('total_price_after_discount'), 2) }}
+                               JD {{ number_format($orders->where('status', 'completed')->sum('commision_of_admin'), 2) }}
                             </div>
                         </div>
                         <div class="col-auto">
