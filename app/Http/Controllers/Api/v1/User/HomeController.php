@@ -27,8 +27,7 @@ class HomeController extends Controller
             }
 
             // Get banners
-            $banners = Banner::where('activate', 1)
-                ->orderBy('order', 'asc')
+            $banners = Banner::orderBy('created_at', 'asc')
                 ->get();
 
             // Check user ban status
