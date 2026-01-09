@@ -1771,4 +1771,7 @@ return [
 'Quick_Actions' => 'إجراءات سريعة',
 'View_Participants' => 'عرض المشاركين',
 'Search_By_Title' => 'البحث بالعنوان',
+'Auto_Cancelled' => 'ألغي اوتوماتيكيا',
+    'Complaints' => 'المشاكل',
+    'Hybrid_Payment' => 'دفع مختلط',
 ];
