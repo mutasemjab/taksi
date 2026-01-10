@@ -41,7 +41,7 @@ Route::group(['prefix' => 'v1/user'], function () {
     Route::get('/country-charges', [CountryChargeApiController::class, 'index']);
 
     //---------------- Auth --------------------//
-
+    Route::get('/banners', [BannerController::class, 'index']);
     Route::get('/appConfig', [AppConfigController::class, 'appConfig']);
     Route::get('/getOptions', [OptionController::class, 'getOptions']);
     Route::post('/check-phone', [AuthController::class, 'checkPhone']);
