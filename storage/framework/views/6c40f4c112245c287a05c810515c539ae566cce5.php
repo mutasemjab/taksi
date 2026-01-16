@@ -11,7 +11,6 @@
         </a>
     </div>
 
-
     <!-- Filter Card -->
     <div class="card shadow mb-4">
         <div class="card-header py-3">
@@ -75,6 +74,7 @@
                                 <option value="delivered" <?php echo e(request('status') == 'delivered' ? 'selected' : ''); ?>><?php echo e(__('messages.Delivered')); ?></option>
                                 <option value="user_cancel_order" <?php echo e(request('status') == 'user_cancel_order' ? 'selected' : ''); ?>><?php echo e(__('messages.User_Cancelled')); ?></option>
                                 <option value="driver_cancel_order" <?php echo e(request('status') == 'driver_cancel_order' ? 'selected' : ''); ?>><?php echo e(__('messages.Driver_Cancelled')); ?></option>
+                                <option value="cancel_cron_job" <?php echo e(request('status') == 'cancel_cron_job' ? 'selected' : ''); ?>><?php echo e(__('messages.Auto_Cancelled')); ?></option>
                             </select>
                         </div>
                     </div>
@@ -102,17 +102,28 @@
                         </div>
                     </div>
                     
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <div class="form-group">
                             <label for="date_from"><?php echo e(__('messages.Date_From')); ?></label>
                             <input type="date" class="form-control" id="date_from" name="date_from" value="<?php echo e(request('date_from')); ?>">
                         </div>
                     </div>
                     
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <div class="form-group">
                             <label for="date_to"><?php echo e(__('messages.Date_To')); ?></label>
                             <input type="date" class="form-control" id="date_to" name="date_to" value="<?php echo e(request('date_to')); ?>">
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <div class="form-group">
+                            <label for="is_hybrid_payment"><?php echo e(__('messages.Hybrid_Payment')); ?></label>
+                            <select class="form-control" id="is_hybrid_payment" name="is_hybrid_payment">
+                                <option value="" <?php echo e(request('is_hybrid_payment') == '' ? 'selected' : ''); ?>><?php echo e(__('messages.All')); ?></option>
+                                <option value="1" <?php echo e(request('is_hybrid_payment') == '1' ? 'selected' : ''); ?>><?php echo e(__('messages.Yes')); ?></option>
+                                <option value="0" <?php echo e(request('is_hybrid_payment') == '0' ? 'selected' : ''); ?>><?php echo e(__('messages.No')); ?></option>
+                            </select>
                         </div>
                     </div>
                     
@@ -140,7 +151,7 @@
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
                                 <?php echo e(__('messages.Total_Orders')); ?></div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo e($orders->count()); ?></div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo e($statistics['total_orders']); ?></div>
                         </div>
                         <div class="col-auto">
                             <i class="fas fa-calendar fa-2x text-gray-300"></i>
@@ -157,7 +168,7 @@
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
                                 <?php echo e(__('messages.Completed_Orders')); ?></div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo e($orders->where('status', 'delivered')->count()); ?></div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo e($statistics['completed_orders']); ?></div>
                         </div>
                         <div class="col-auto">
                             <i class="fas fa-check-circle fa-2x text-gray-300"></i>
@@ -174,7 +185,7 @@
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
                                 <?php echo e(__('messages.Cancelled_Orders')); ?></div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo e($orders->whereIn('status', ['user_cancel_order', 'driver_cancel_order'])->count()); ?></div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo e($statistics['cancelled_orders']); ?></div>
                         </div>
                         <div class="col-auto">
                             <i class="fas fa-times-circle fa-2x text-gray-300"></i>
@@ -192,7 +203,7 @@
                             <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
                                 <?php echo e(__('messages.Total_Revenue')); ?></div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">
-                               JD <?php echo e(number_format($orders->where('status', 'delivered')->sum('total_price_after_discount'), 2)); ?>
+                               JD <?php echo e(number_format($statistics['total_revenue'], 2)); ?>
 
                             </div>
                         </div>
@@ -227,6 +238,8 @@
                             <th><?php echo e(__('messages.Commission')); ?></th>
                             <th><?php echo e(__('messages.Status')); ?></th>
                             <th><?php echo e(__('messages.Payment')); ?></th>
+                            <th><?php echo e(__('messages.Rating')); ?></th>
+                            <th><?php echo e(__('messages.Complaints')); ?></th>
                             <th><?php echo e(__('messages.Actions')); ?></th>
                         </tr>
                     </thead>
@@ -236,6 +249,9 @@
                             <td><?php echo e($order->id); ?></td>
                             <td>
                                 <span class="font-weight-bold text-primary"><?php echo e($order->number ?? 'N/A'); ?></span>
+                                <?php if($order->is_hybrid_payment): ?>
+                                <br><span class="badge badge-info badge-sm">Hybrid</span>
+                                <?php endif; ?>
                             </td>
                             <td><?php echo e($order->created_at->format('Y-m-d H:i')); ?></td>
                             <td>
@@ -307,6 +323,16 @@
 
                                     </div>
                                     <?php endif; ?>
+                                    
+                                    <?php if($order->is_hybrid_payment): ?>
+                                    <div class="mt-1">
+                                        <small class="text-info">
+                                            <i class="fas fa-wallet"></i> JD <?php echo e(number_format($order->wallet_amount_used, 2)); ?><br>
+                                            <i class="fas fa-money-bill"></i> JD <?php echo e(number_format($order->cash_amount_due, 2)); ?>
+
+                                        </small>
+                                    </div>
+                                    <?php endif; ?>
                                 </div>
                             </td>
                             <td>
@@ -345,6 +371,34 @@
                                         </span>
                                     </div>
                                 </div>
+                            </td>
+                            <td class="text-center">
+                                <?php if($order->rating): ?>
+                                <div>
+                                    <?php for($i = 1; $i <= 5; $i++): ?>
+                                        <?php if($i <= $order->rating->rating): ?>
+                                        <i class="fas fa-star text-warning"></i>
+                                        <?php else: ?>
+                                        <i class="far fa-star text-muted"></i>
+                                        <?php endif; ?>
+                                    <?php endfor; ?>
+                                    <br>
+                                    <small class="text-muted">(<?php echo e($order->rating->rating); ?>/5)</small>
+                                </div>
+                                <?php else: ?>
+                                <span class="text-muted">-</span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="text-center">
+                                <?php if($order->complaints->count() > 0): ?>
+                                <span class="badge badge-danger">
+                                    <?php echo e($order->complaints->count()); ?>
+
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                </span>
+                                <?php else: ?>
+                                <span class="text-muted">-</span>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <div class="btn-group-vertical">
@@ -386,7 +440,7 @@
     }
     
     .price-info {
-        min-width: 100px;
+        min-width: 120px;
     }
     
     .commission-info {
@@ -422,5 +476,15 @@
         }
     }
 </style>
+
+<?php $__env->startSection('script'); ?>
+<script>
+function deleteOrder(id) {
+    if (confirm('<?php echo e(__("messages.Are_You_Sure_Delete")); ?>')) {
+        document.getElementById('delete-form-' + id).submit();
+    }
+}
+</script>
+<?php $__env->stopSection(); ?>
 <?php $__env->stopSection(); ?>
 <?php echo $__env->make('layouts.admin', \Illuminate\Support\Arr::except(get_defined_vars(), ['__data', '__path']))->render(); ?><?php /**PATH C:\xampp\htdocs\taksi\resources\views/admin/orders/index.blade.php ENDPATH**/ ?>

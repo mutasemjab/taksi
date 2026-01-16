@@ -43,7 +43,8 @@ class OTPService
         $messages = [
             'en' => [
                 'otp_sent' => 'OTP sent successfully',
-                'rate_limit' => 'Please wait :minutes minute(s) before requesting another OTP.',
+                'rate_limit_seconds' => 'Please wait :seconds second(s) before requesting another OTP.',
+                'rate_limit_minutes' => 'Please wait :minutes minute(s) and :seconds second(s) before requesting another OTP.',
                 'invalid_otp' => 'Invalid OTP. Please try again.',
                 'otp_expired' => 'OTP has expired. Please request a new one.',
                 'otp_verified' => 'OTP verified successfully',
@@ -54,7 +55,8 @@ class OTPService
             ],
             'ar' => [
                 'otp_sent' => 'تم إرسال رمز التحقق بنجاح',
-                'rate_limit' => 'يرجى الانتظار :minutes دقيقة قبل طلب رمز تحقق جديد.',
+                'rate_limit_seconds' => 'يرجى الانتظار :seconds ثانية قبل طلب رمز تحقق جديد.',
+                'rate_limit_minutes' => 'يرجى الانتظار :minutes دقيقة و :seconds ثانية قبل طلب رمز تحقق جديد.',
                 'invalid_otp' => 'رمز التحقق غير صحيح. يرجى المحاولة مرة أخرى.',
                 'otp_expired' => 'انتهت صلاحية رمز التحقق. يرجى طلب رمز جديد.',
                 'otp_verified' => 'تم التحقق من الرمز بنجاح',
@@ -96,7 +98,7 @@ class OTPService
     {
         $min = pow(10, $this->otpConfig['length'] - 1);
         $max = pow(10, $this->otpConfig['length']) - 1;
-        
+
         return (string) rand($min, $max);
     }
 
@@ -111,7 +113,7 @@ class OTPService
     {
         $cacheKey = 'otp_' . $identifier;
         Cache::put($cacheKey, $otp, $this->otpConfig['expiry_minutes'] * 60);
-        
+
         Log::info('OTP stored for identifier: ' . $identifier, [
             'cache_key' => $cacheKey,
             'expiry_minutes' => $this->otpConfig['expiry_minutes']
@@ -159,6 +161,67 @@ class OTPService
     }
 
     /**
+     * Get remaining time for rate limit in seconds
+     *
+     * @param string $mobile
+     * @return int|null
+     */
+    private function getRateLimitTTL(string $mobile): ?int
+    {
+        $rateLimitKey = 'otp_rate_limit_' . $mobile;
+
+        if (!Cache::has($rateLimitKey)) {
+            return null;
+        }
+
+        // Get TTL from cache store
+        try {
+            $store = Cache::getStore();
+
+            // For Redis
+            if (method_exists($store, 'getRedis')) {
+                return $store->getRedis()->ttl($rateLimitKey);
+            }
+
+            // For file/database cache - get the stored timestamp
+            $timestamp = Cache::get($rateLimitKey);
+            if ($timestamp) {
+                $remaining = $timestamp - time();
+                return $remaining > 0 ? $remaining : 0;
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to get rate limit TTL: ' . $e->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Format remaining time message
+     *
+     * @param int $remainingSeconds
+     * @return string
+     */
+    private function formatRateLimitMessage(int $remainingSeconds): string
+    {
+        if ($remainingSeconds < 60) {
+            // Less than 1 minute - show seconds only
+            return $this->getMessage('rate_limit_seconds', [
+                'seconds' => $remainingSeconds
+            ]);
+        } else {
+            // 1 minute or more - show minutes and seconds
+            $minutes = floor($remainingSeconds / 60);
+            $seconds = $remainingSeconds % 60;
+
+            return $this->getMessage('rate_limit_minutes', [
+                'minutes' => $minutes,
+                'seconds' => $seconds
+            ]);
+        }
+    }
+
+    /**
      * Check if user can request OTP (rate limiting - 2 minutes cooldown)
      *
      * @param string $mobile
@@ -167,22 +230,27 @@ class OTPService
     public function canRequestOTP(string $mobile): array
     {
         $rateLimitKey = 'otp_rate_limit_' . $mobile;
-        
+
         if (Cache::has($rateLimitKey)) {
-            $remainingSeconds = Cache::get($rateLimitKey);
-            $remainingMinutes = ceil($remainingSeconds / 60);
-            
+            $remainingSeconds = $this->getRateLimitTTL($mobile);
+
+            if ($remainingSeconds === null || $remainingSeconds <= 0) {
+                // TTL expired or couldn't be retrieved, allow request
+                Cache::forget($rateLimitKey);
+                return ['can_request' => true];
+            }
+
             Log::warning('OTP rate limit hit for mobile: ' . $mobile, [
                 'remaining_seconds' => $remainingSeconds
             ]);
-            
+
             return [
                 'can_request' => false,
-                'message' => $this->getMessage('rate_limit', ['minutes' => $remainingMinutes]),
+                'message' => $this->formatRateLimitMessage($remainingSeconds),
                 'remaining_seconds' => $remainingSeconds
             ];
         }
-        
+
         return [
             'can_request' => true
         ];
@@ -198,9 +266,10 @@ class OTPService
     {
         $rateLimitKey = 'otp_rate_limit_' . $mobile;
         $cooldownSeconds = 120; // 2 minutes
-        
-        Cache::put($rateLimitKey, $cooldownSeconds, $cooldownSeconds);
-        
+
+        // Store the expiry timestamp
+        Cache::put($rateLimitKey, time() + $cooldownSeconds, $cooldownSeconds);
+
         Log::info('OTP rate limit set for mobile: ' . $mobile, [
             'cooldown_seconds' => $cooldownSeconds
         ]);
@@ -217,7 +286,7 @@ class OTPService
     {
         // Format mobile number (remove + if present)
         $formattedMobile = ltrim($mobile, '+');
-        
+
         // Prepare message
         $message = str_replace(
             ['{otp}', '{minutes}'],
@@ -326,6 +395,15 @@ class OTPService
             // Check rate limiting first
             $rateLimitCheck = $this->canRequestOTP($mobile);
             if (!$rateLimitCheck['can_request']) {
+                // ========== LOG RATE LIMIT FAILURE ==========
+                \Log::channel('otp_failed')->warning('OTP request rate limit exceeded', [
+                    'mobile' => $mobile,
+                    'remaining_seconds' => $rateLimitCheck['remaining_seconds'],
+                    'message' => $rateLimitCheck['message'],
+                    'timestamp' => now()->toDateTimeString(),
+                ]);
+                // ========== END LOG RATE LIMIT FAILURE ==========
+                
                 return [
                     'success' => false,
                     'message' => $rateLimitCheck['message'],
@@ -336,17 +414,17 @@ class OTPService
 
             // Generate OTP
             $otp = $this->generateOTP();
-            
+
             // Store OTP
             $this->storeOTP($mobile, $otp);
-            
+
             // Send SMS
             $smsResult = $this->sendOTPSMS($mobile, $otp);
-            
+
             if ($smsResult['success']) {
                 // Set rate limit only after successful SMS send
                 $this->setRateLimit($mobile);
-                
+
                 return [
                     'success' => true,
                     'message' => $this->getMessage('otp_sent'),
@@ -355,29 +433,45 @@ class OTPService
             } else {
                 // Remove OTP from cache if SMS failed
                 Cache::forget('otp_' . $mobile);
-                
-                // Log detailed error for debugging
-                Log::error('SMS Gateway Failed - Phone may not receive OTP:', [
+
+                // ========== LOG SMS SENDING FAILURE ==========
+                \Log::channel('otp_failed')->error('SMS Gateway Failed - OTP not sent', [
                     'mobile' => $mobile,
+                    'formatted_mobile' => ltrim($mobile, '+'),
                     'error' => $smsResult['error'] ?? 'Unknown error',
                     'response' => $smsResult['response'] ?? 'No response',
+                    'http_code' => $smsResult['http_code'] ?? null,
+                    'sms_config' => [
+                        'sender_id' => $this->smsConfig['sender_id'],
+                        'account_name' => $this->smsConfig['account_name'],
+                        'base_url' => $this->smsConfig['base_url'],
+                    ],
                     'possible_reasons' => [
                         'Invalid phone number format',
                         'SMS gateway credentials issue',
                         'Network/carrier blocking',
                         'Insufficient gateway balance',
-                        'Phone number not registered with carrier'
-                    ]
+                        'Phone number not registered with carrier',
+                        'Carrier/Country restrictions',
+                    ],
+                    'timestamp' => now()->toDateTimeString(),
                 ]);
-                
+                // ========== END LOG SMS SENDING FAILURE ==========
+
                 return $smsResult;
             }
         } catch (\Exception $e) {
-            Log::error('Send OTP failed:', [
+            // ========== LOG EXCEPTION FAILURE ==========
+            \Log::channel('otp_failed')->error('Send OTP Exception', [
                 'mobile' => $mobile,
-                'error' => $e->getMessage()
+                'error_message' => $e->getMessage(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'stack_trace' => $e->getTraceAsString(),
+                'timestamp' => now()->toDateTimeString(),
             ]);
-            
+            // ========== END LOG EXCEPTION FAILURE ==========
+
             return [
                 'success' => false,
                 'message' => $this->getMessage('send_otp_failed'),
@@ -385,6 +479,7 @@ class OTPService
             ];
         }
     }
+
 
     /**
      * Handle test case for development
@@ -396,10 +491,18 @@ class OTPService
     public function isTestCase(string $mobile, string $otp): bool
     {
         $testCases = config('otp.test_cases', []);
-        
+
         return isset($testCases[$mobile]) && $testCases[$mobile] === $otp;
     }
 
+    /**
+     * Verify OTP with test case support
+     *
+     * @param string $mobile
+     * @param string $otp
+     * @return array
+     */
+   
     /**
      * Verify OTP with test case support
      *
@@ -430,6 +533,15 @@ class OTPService
 
         // Check if OTP exists but is wrong
         if ($this->otpExists($mobile)) {
+            // ========== LOG INVALID OTP FAILURE ==========
+            \Log::channel('otp_failed')->warning('Invalid OTP entered', [
+                'mobile' => $mobile,
+                'entered_otp' => $otp,
+                'error_code' => 'INVALID_OTP',
+                'timestamp' => now()->toDateTimeString(),
+            ]);
+            // ========== END LOG INVALID OTP FAILURE ==========
+            
             return [
                 'success' => false,
                 'message' => $this->getMessage('invalid_otp'),
@@ -438,6 +550,15 @@ class OTPService
         }
 
         // OTP expired or not found
+        // ========== LOG EXPIRED OTP FAILURE ==========
+        \Log::channel('otp_failed')->warning('OTP expired or not found', [
+            'mobile' => $mobile,
+            'entered_otp' => $otp,
+            'error_code' => 'OTP_EXPIRED',
+            'timestamp' => now()->toDateTimeString(),
+        ]);
+        // ========== END LOG EXPIRED OTP FAILURE ==========
+        
         return [
             'success' => false,
             'message' => $this->getMessage('otp_expired'),
@@ -467,11 +588,11 @@ class OTPService
     public function getOTPTTL(string $identifier): ?int
     {
         $cacheKey = 'otp_' . $identifier;
-        
+
         if (Cache::has($cacheKey)) {
             return Cache::getStore()->getRedis()->ttl($cacheKey);
         }
-        
+
         return null;
     }
 }

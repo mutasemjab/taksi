@@ -134,9 +134,24 @@
                             <p><?php echo e(__('messages.orders')); ?></p>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="<?php echo e(route('spam-orders.index')); ?>">
+                            <i class="fas fa-fw fa-trash-alt"></i>
+                            <span><?php echo e(__('messages.Spam_Orders')); ?></span>
+                        </a>
+                    </li>
                 <?php endif; ?>
 
-
+                <!-- Challenges -->
+                <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->check('challenge-table')): ?>
+                    <li class="nav-item">
+                        <a href="<?php echo e(route('challenges.index')); ?>"
+                            class="nav-link <?php echo e(request()->routeIs('challenges.*') ? 'active' : ''); ?>">
+                            <i class="nav-icon fas fa-trophy"></i>
+                            <p><?php echo e(__('messages.Challenges')); ?></p>
+                        </a>
+                    </li>
+                <?php endif; ?>
 
                 <!-- Notifications -->
                 <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->check('notification-table')): ?>
@@ -324,8 +339,6 @@
                                                 <p><?php echo e(__('messages.POS_Financial_Report')); ?></p>
                                             </a>
                                         </li>
-
-                                      
                                     </ul>
                                 </li>
                             <?php endif; ?>
