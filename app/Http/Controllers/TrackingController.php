@@ -28,15 +28,15 @@ class TrackingController extends Controller
             ->first();
 
         if (!$order) {
-            return view('tracking.not-found');
+            return view('not-found');
         }
 
         // Check if order can be tracked
         if (!$order->canBeTracked()) {
-            return view('tracking.not-available', compact('order'));
+            return view('not-available', compact('order'));
         }
 
-        return view('tracking.live', compact('order'));
+        return view('tracking-live', compact('order'));
     }
 
     /**
