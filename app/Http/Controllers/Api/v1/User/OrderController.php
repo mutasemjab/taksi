@@ -208,9 +208,7 @@ class OrderController extends Controller
             if (!$calculatedPrice) {
                 $distance = 0;
 
-                // Only calculate distance if both end_lat and end_lng are present
                 if (!is_null($request->end_lat) && !is_null($request->end_lng)) {
-                    // استخدام OSRM بدلاً من Haversine
                     $distance = $this->calculateDistanceOSRM(
                         $request->start_lat,
                         $request->start_lng,
@@ -219,10 +217,7 @@ class OrderController extends Controller
                     );
                 }
 
-                // Determine if it's evening time
                 $isEvening = $this->isEveningTime();
-
-                // Select pricing based on time of day
                 $startPrice = $isEvening ? $service->start_price_evening : $service->start_price_morning;
                 $pricePerKm = $isEvening ? $service->price_per_km_evening : $service->price_per_km_morning;
 
@@ -248,7 +243,6 @@ class OrderController extends Controller
                     ], 200);
                 }
 
-                // Check if coupon is valid (date range)
                 if (!$coupon->isValid()) {
                     return response()->json([
                         'status' => false,
@@ -257,14 +251,11 @@ class OrderController extends Controller
                     ], 200);
                 }
 
-                // Check how many times THIS USER has used this coupon
                 $userUsageCount = DB::table('user_coupons')
                     ->where('user_id', auth()->id())
                     ->where('coupon_id', $coupon->id)
                     ->count();
 
-                // Check usage limit per user (using number_of_used)
-                // If number_of_used is null, unlimited usage per user
                 if (!is_null($coupon->number_of_used) && $userUsageCount >= $coupon->number_of_used) {
                     return response()->json([
                         'status' => false,
@@ -273,7 +264,6 @@ class OrderController extends Controller
                     ], 200);
                 }
 
-                // Check minimum amount
                 if ($calculatedPrice < $coupon->minimum_amount) {
                     return response()->json([
                         'status' => false,
@@ -282,8 +272,7 @@ class OrderController extends Controller
                     ], 200);
                 }
 
-                // Check coupon type restrictions
-                if ($coupon->coupon_type == 2) { // First ride only
+                if ($coupon->coupon_type == 2) {
                     $previousOrdersCount = Order::where('user_id', auth()->id())
                         ->whereIn('status', ['completed'])
                         ->count();
@@ -295,7 +284,7 @@ class OrderController extends Controller
                             'message' => 'This coupon is only valid for first ride'
                         ], 200);
                     }
-                } elseif ($coupon->coupon_type == 3) { // Specific service only
+                } elseif ($coupon->coupon_type == 3) {
                     if ($coupon->service_id != $request->service_id) {
                         return response()->json([
                             'status' => false,
@@ -305,59 +294,66 @@ class OrderController extends Controller
                     }
                 }
 
-                // Calculate discount
-                if ($coupon->discount_type == 1) { // Fixed amount
+                if ($coupon->discount_type == 1) {
                     $discountValue = $coupon->discount;
-                } else { // Percentage
+                } else {
                     $discountValue = ($calculatedPrice * $coupon->discount) / 100;
                 }
 
-                // Ensure discount doesn't exceed total price
                 $discountValue = min($discountValue, $calculatedPrice);
                 $finalPrice = $calculatedPrice - $discountValue;
                 $couponId = $coupon->id;
             }
 
-            // ========== تحقق من رصيد المحفظة حسب نظام التوزيع ==========
-            if ($paymentMethodValue === PaymentMethod::Wallet->value) {
-                    $user = auth()->user();
+            // ========== ✅ SEPARATE BALANCE CHECK FOR EACH PAYMENT METHOD ==========
+            $user = auth()->user();
 
-                    // ========== رصيد التطبيق (App Credit) - منفصل عن المحفظة ==========
-                    $appCreditEnabled = DB::table('settings')
-                        ->where('key', 'enable_app_credit_distribution_system')
-                        ->value('value') == 1;
-                    
-                    $availableAppCredit = $user->getAvailableAppCreditForOrder();
-                    
-                    // ========== المحفظة الحقيقية (Real Wallet) - بدون تأثر بالتوزيع ==========
-                    $realWalletBalance = $user->balance;
-                    
-                    // حساب إجمالي الرصيد المتاح (رصيد التطبيق + المحفظة)
-                    $totalAvailableBalance = $availableAppCredit + $realWalletBalance;
-                    
-                    // التحقق من كفاية الرصيد الإجمالي
-                    if ($totalAvailableBalance < $finalPrice) {
-                        return response()->json([
-                            'status' => false,
-                            'type' => 'insufficient_balance',
-                            'message' => 'لا يوجد معك رصيد كافي',
-                            'data' => [
-                                'app_credit_system_active' => $appCreditEnabled,
-                                'app_credit_available' => $availableAppCredit,
-                                'app_credit_orders_remaining' => $appCreditEnabled ? $user->app_credit_orders_remaining : 0,
-                                'app_credit_amount_per_order' => $appCreditEnabled ? $user->app_credit_amount_per_order : 0,
-                                'real_wallet_balance' => $realWalletBalance,
-                                'total_available' => $totalAvailableBalance,
-                                'required_amount' => $finalPrice,
-                                'shortage' => $finalPrice - $totalAvailableBalance,
-                                'payment_breakdown' => [
-                                    'will_use_app_credit' => min($availableAppCredit, $finalPrice),
-                                    'will_use_wallet' => min($realWalletBalance, max(0, $finalPrice - $availableAppCredit)),
-                                    'still_needed' => max(0, $finalPrice - $totalAvailableBalance)
-                                ]
-                            ]
-                        ], 200);
-                    }
+            if ($paymentMethodValue === PaymentMethod::AppCredit->value) {
+                // ✅ التحقق من رصيد التطبيق فقط
+                $appCreditEnabled = DB::table('settings')
+                    ->where('key', 'enable_app_credit_distribution_system')
+                    ->value('value') == 1;
+
+                if (!$appCreditEnabled) {
+                    return response()->json([
+                        'status' => false,
+                        'type' => 'app_credit_disabled',
+                        'message' => 'نظام رصيد التطبيق غير مفعل حالياً',
+                    ], 200);
+                }
+
+                $availableAppCredit = $user->getAvailableAppCreditForOrder();
+
+                if ($availableAppCredit < $finalPrice) {
+                    return response()->json([
+                        'status' => false,
+                        'type' => 'insufficient_app_credit',
+                        'message' => 'رصيد التطبيق غير كافٍ',
+                        'data' => [
+                            'app_credit_available' => $availableAppCredit,
+                            'app_credit_orders_remaining' => $user->app_credit_orders_remaining,
+                            'app_credit_amount_per_order' => $user->app_credit_amount_per_order,
+                            'required_amount' => $finalPrice,
+                            'shortage' => $finalPrice - $availableAppCredit,
+                        ]
+                    ], 200);
+                }
+            } elseif ($paymentMethodValue === PaymentMethod::Wallet->value) {
+                // ✅ التحقق من المحفظة الحقيقية فقط
+                $realWalletBalance = $user->balance;
+
+                if ($realWalletBalance < $finalPrice) {
+                    return response()->json([
+                        'status' => false,
+                        'type' => 'insufficient_wallet_balance',
+                        'message' => 'رصيد المحفظة غير كافٍ',
+                        'data' => [
+                            'wallet_balance' => $realWalletBalance,
+                            'required_amount' => $finalPrice,
+                            'shortage' => $finalPrice - $realWalletBalance,
+                        ]
+                    ], 200);
+                }
             }
 
             // Use DB transaction to ensure data consistency
@@ -403,7 +399,7 @@ class OrderController extends Controller
 
                 DB::commit();
 
-                // ✅ FIX: Start search immediately (no delay for first zone)
+                // Start driver search
                 $result = $this->driverLocationService->findAndStoreOrderInFirebase(
                     $request->start_lat,
                     $request->start_lng,
@@ -411,17 +407,15 @@ class OrderController extends Controller
                     $request->service_id,
                     null,
                     OrderStatus::Pending->value,
-                    false // ✅ end_search flag starts as false
+                    false
                 );
 
                 $searchEnded = ($result['next_radius'] === null);
 
                 if ($searchEnded) {
-                    // ✅ Update end_search to true in Firebase immediately
                     $this->driverLocationService->updateEndSearchFlag($order->id, true);
                 }
 
-                // ✅ Just log the status - DriverLocationService handles all job dispatching
                 if (isset($result['next_radius']) && $result['next_radius'] !== null) {
                     \Log::info("Driver search will continue - next zone: {$result['next_radius']}km for order {$order->id}");
                 } elseif (isset($result['search_complete']) && $result['search_complete'] === true) {
@@ -444,7 +438,7 @@ class OrderController extends Controller
                             'next_search_radius' => $result['next_radius'] ?? null,
                             'will_expand_search' => ($result['next_radius'] ?? null) !== null,
                             'wait_time_seconds' => 30,
-                             'end_search' => $searchEnded,
+                            'end_search' => $searchEnded,
                             'status' => $result['success'] ? 'searching' : 'no_drivers_available'
                         ],
                         'user_location' => [

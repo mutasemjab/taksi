@@ -69,9 +69,9 @@ return new class extends Migration
     
             $table->text('reason_for_cancel')->nullable();
 
-            $table->enum('payment_method', ['cash', 'visa', 'wallet'])
-                  ->default('cash');
-
+           $table->enum('payment_method', ['cash', 'visa', 'wallet', 'app_credit'])
+            ->default('cash');
+            
             // Change status_payment to ENUM
             $table->enum('status_payment', ['pending', 'paid'])
                   ->default('pending');
