@@ -270,18 +270,40 @@ class DriverLocationService
                 $nextRadius = $radiusZones[$currentIndex + 1];
             }
 
-            // ✅ If no next radius and no drivers found, mark search as ended
+            // If no next radius and no drivers found, mark search as ended
             if ($nextRadius === null) {
                 $this->updateEndSearchFlag($orderId, true);
+
+                return [
+                    'success' => false,
+                    'message' => "No drivers found after searching all zones up to {$currentRadius}km",
+                    'drivers_found' => 0,
+                    'search_radius' => $currentRadius,
+                    'next_radius' => null,
+                    'service_id' => $serviceId,
+                    'search_complete' => true
+                ];
             }
+
+            // ✅ Schedule immediate search in next zone even when current zone is empty
+            \App\Jobs\SearchDriversInNextZone::dispatch(
+                $orderId,
+                $currentRadius,
+                $serviceId,
+                $userLat,
+                $userLng
+            )->delay(now()->addSeconds(10));
+
+            \Log::info("No drivers in {$currentRadius}km, scheduled search for {$nextRadius}km zone in 10 seconds for order {$orderId}");
 
             return [
                 'success' => false,
-                'message' => "No drivers found in {$currentRadius}km radius. Will expand search.",
+                'message' => "No drivers found in {$currentRadius}km radius. Expanding to {$nextRadius}km.",
                 'drivers_found' => 0,
                 'search_radius' => $currentRadius,
                 'next_radius' => $nextRadius,
-                'service_id' => $serviceId
+                'service_id' => $serviceId,
+                'will_expand' => true
             ];
         } catch (\Exception $e) {
             \Log::error('Error in findAndStoreOrderInFirebase: ' . $e->getMessage());

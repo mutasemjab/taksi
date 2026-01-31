@@ -421,15 +421,11 @@ class OrderController extends Controller
                     $this->driverLocationService->updateEndSearchFlag($order->id, true);
                 }
 
-                // ✅ FIX: Schedule next zone search ONLY if needed and order is still pending
-                if ($result['success'] && isset($result['next_radius']) && $result['next_radius'] !== null) {
-                    \App\Jobs\SearchDriversInNextZone::dispatch(
-                        $order->id,
-                        $result['search_radius'],
-                        $request->service_id,
-                        $request->start_lat,
-                        $request->start_lng
-                    )->delay(now()->addSeconds(30));
+                // ✅ Just log the status - DriverLocationService handles all job dispatching
+                if (isset($result['next_radius']) && $result['next_radius'] !== null) {
+                    \Log::info("Driver search will continue - next zone: {$result['next_radius']}km for order {$order->id}");
+                } elseif (isset($result['search_complete']) && $result['search_complete'] === true) {
+                    \Log::info("Driver search completed - all zones searched for order {$order->id}");
                 }
 
                 return response()->json([
