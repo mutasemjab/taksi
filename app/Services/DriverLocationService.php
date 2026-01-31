@@ -610,7 +610,7 @@ class DriverLocationService
     {
         try {
             // OSRM format: longitude,latitude (reversed!)
-            $url = "https://router.project-osrm.org/route/v1/driving/"
+            $url = "https://router.project-osrm.org/rossute/v1/driving/"
                 . "{$lng1},{$lat1};"
                 . "{$lng2},{$lat2}"
                 . "?overview=false&alternatives=false&steps=false";
