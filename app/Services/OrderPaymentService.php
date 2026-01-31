@@ -215,6 +215,9 @@ class OrderPaymentService
     }
 
 
+    /**
+     * ✅ Process App Credit Payment - يخصم المبلغ المحدد والباقي نقدي
+     */
     private function processAppCreditPayment($order, $driver, $finalPrice, $driverBaseEarning, $discountValue, &$paymentDetails)
     {
         $user = $order->user;
@@ -228,21 +231,30 @@ class OrderPaymentService
             throw new \Exception("App credit system is not enabled");
         }
 
-        $availableAppCredit = $user->getAvailableAppCreditForOrder();
+        $availableAppCreditPerOrder = $user->getAvailableAppCreditForOrder();
 
-        if ($availableAppCredit < $finalPrice) {
-            throw new \Exception("Insufficient app credit balance");
+        if ($availableAppCreditPerOrder <= 0) {
+            throw new \Exception("No app credit available for this order");
         }
 
-        // ========== Step 2: خصم من رصيد التطبيق ==========
+        // ========== Step 2: حساب المبلغ من رصيد التطبيق والنقدي ==========
+        // ✅ نخصم فقط المبلغ المتاح (0.5 JD مثلاً)، والباقي نقدي
+        $amountFromAppCredit = min($availableAppCreditPerOrder, $finalPrice);
+        $cashAmount = max(0, $finalPrice - $amountFromAppCredit);
+
+        $isHybridPayment = ($cashAmount > 0);
+
+        // ========== Step 3: خصم من رصيد التطبيق ==========
         $ordersRemainingBefore = $user->app_credit_orders_remaining;
 
         DB::table('app_credit_transactions')->insert([
             'order_id' => $order->id,
             'user_id' => $user->id,
-            'amount' => $finalPrice,
+            'amount' => $amountFromAppCredit,
             'type_of_transaction' => 2, // withdrawal
-            'note' => "الدفع للطلب رقم {$order->id} من رصيد التطبيق",
+            'note' => $isHybridPayment
+                ? "الدفع للطلب رقم {$order->id} من رصيد التطبيق ({$amountFromAppCredit} JD) والباقي نقدي ({$cashAmount} JD)"
+                : "الدفع للطلب رقم {$order->id} من رصيد التطبيق ({$amountFromAppCredit} JD)",
             'orders_remaining_before' => $ordersRemainingBefore,
             'orders_remaining_after' => max(0, $ordersRemainingBefore - 1),
             'amount_per_order' => $user->app_credit_amount_per_order,
@@ -252,48 +264,53 @@ class OrderPaymentService
 
         DB::table('users')
             ->where('id', $user->id)
-            ->decrement('app_credit', $finalPrice);
+            ->decrement('app_credit', $amountFromAppCredit);
 
         $user->fresh()->decrementAppCreditOrdersRemaining();
 
         $paymentDetails['transactions_created'][] = [
             'type' => 'app_credit_deduction',
-            'amount' => $finalPrice,
-            'description' => 'Payment from app credit distribution system'
+            'amount' => $amountFromAppCredit,
+            'description' => 'Partial payment from app credit distribution system'
         ];
 
-        $order->app_credit_amount_used = $finalPrice;
+        // ✅ تحديث الطلب بمعلومات الدفع
+        $order->app_credit_amount_used = $amountFromAppCredit;
         $order->wallet_amount_used = 0;
-        $order->cash_amount_due = 0;
-        $order->is_hybrid_payment = false;
+        $order->cash_amount_due = $cashAmount;
+        $order->is_hybrid_payment = $isHybridPayment;
         $order->save();
 
-        // ========== Step 3: تحويل المبلغ للسائق ==========
+        // ========== Step 4: تحويل المبلغ من رصيد التطبيق للسائق ==========
+        if ($amountFromAppCredit > 0) {
+            DB::table('wallet_transactions')->insert([
+                'order_id' => $order->id,
+                'driver_id' => $driver->id,
+                'amount' => $amountFromAppCredit,
+                'type_of_transaction' => 1, // addition
+                'note' => "تحويل {$amountFromAppCredit} JD من رصيد تطبيق المستخدم للطلب رقم {$order->id}",
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            DB::table('drivers')
+                ->where('id', $driver->id)
+                ->increment('balance', $amountFromAppCredit);
+
+            $paymentDetails['transactions_created'][] = [
+                'type' => 'transfer_to_driver_from_app_credit',
+                'amount' => $amountFromAppCredit,
+                'description' => 'Amount transferred to driver from user app credit'
+            ];
+        }
+
+        // ========== Step 5: خصم عمولة الإدارة من السعر الكلي ==========
+        $adminCommission = $this->getServiceCommission($order->service_id, $order->total_price_before_discount)['admin_commission'];
+
         DB::table('wallet_transactions')->insert([
             'order_id' => $order->id,
             'driver_id' => $driver->id,
-            'amount' => $finalPrice,
-            'type_of_transaction' => 1, // addition
-            'note' => "تحويل المبلغ من رصيد تطبيق المستخدم للطلب رقم {$order->id}",
-            'created_at' => now(),
-            'updated_at' => now()
-        ]);
-
-        DB::table('drivers')
-            ->where('id', $driver->id)
-            ->increment('balance', $finalPrice);
-
-        $paymentDetails['transactions_created'][] = [
-            'type' => 'transfer_to_driver_from_app_credit',
-            'amount' => $finalPrice,
-            'description' => 'Amount transferred to driver from user app credit'
-        ];
-
-        // ========== Step 4: خصم عمولة الإدارة ==========
-        DB::table('wallet_transactions')->insert([
-            'order_id' => $order->id,
-            'driver_id' => $driver->id,
-            'amount' => $this->getServiceCommission($order->service_id, $order->total_price_before_discount)['admin_commission'],
+            'amount' => $adminCommission,
             'type_of_transaction' => 2, // withdrawal
             'note' => "خصم عمولة الإدارة للطلب رقم {$order->id}",
             'created_at' => now(),
@@ -302,15 +319,15 @@ class OrderPaymentService
 
         DB::table('drivers')
             ->where('id', $driver->id)
-            ->decrement('balance', $this->getServiceCommission($order->service_id, $order->total_price_before_discount)['admin_commission']);
+            ->decrement('balance', $adminCommission);
 
         $paymentDetails['transactions_created'][] = [
             'type' => 'admin_commission_deduction',
-            'amount' => $this->getServiceCommission($order->service_id, $order->total_price_before_discount)['admin_commission'],
+            'amount' => $adminCommission,
             'description' => 'Admin commission deducted from driver wallet'
         ];
 
-        // ========== Step 5: تعويض الخصم (الكوبون) ==========
+        // ========== Step 6: تعويض الخصم (الكوبون) ==========
         if ($discountValue > 0) {
             DB::table('wallet_transactions')->insert([
                 'order_id' => $order->id,
@@ -333,12 +350,26 @@ class OrderPaymentService
             ];
         }
 
+        // ========== معلومات الدفع ==========
+        $paymentDetails['payment_type'] = $isHybridPayment ? 'hybrid_app_credit_cash' : 'full_app_credit';
         $paymentDetails['app_credit_details'] = [
-            'amount_used' => $finalPrice,
+            'amount_used_from_app_credit' => $amountFromAppCredit,
+            'cash_amount_required' => $cashAmount,
             'orders_remaining_before' => $ordersRemainingBefore,
             'orders_remaining_after' => $user->fresh()->app_credit_orders_remaining,
-            'amount_per_order' => $user->app_credit_amount_per_order
+            'amount_per_order' => $user->app_credit_amount_per_order,
+            'is_hybrid_payment' => $isHybridPayment
         ];
+
+        if ($isHybridPayment) {
+            $paymentDetails['cash_collection_required'] = true;
+            $paymentDetails['cash_collection_details'] = [
+                'amount' => $cashAmount,
+                'note' => 'Driver must collect this amount in cash from user',
+                'message_ar' => "يجب على السائق تحصيل {$cashAmount} JD نقداً من المستخدم",
+                'message_en' => "Driver must collect JD {$cashAmount} cash from user"
+            ];
+        }
 
         $paymentDetails['user_final_balances'] = [
             'app_credit' => $user->fresh()->app_credit,
@@ -349,7 +380,9 @@ class OrderPaymentService
         $paymentDetails['driver_final_balance'] = $driver->fresh()->balance;
 
         Log::info("App credit payment processed for order {$order->id}", [
-            'amount' => $finalPrice,
+            'amount_from_app_credit' => $amountFromAppCredit,
+            'cash_amount' => $cashAmount,
+            'is_hybrid' => $isHybridPayment,
             'orders_remaining' => $user->fresh()->app_credit_orders_remaining
         ]);
     }
@@ -523,200 +556,4 @@ class OrderPaymentService
             'price_per_km' => $isEvening ? $service->price_per_km_evening : $service->price_per_km_morning,
         ];
     }
-
-
-    /**
-     * Calculate final price based on settings and trip duration
-     * Includes in-trip waiting charges when pricing method is "both" (3)
-     */
-    // public function calculateFinalPrice($order)
-    // {
-    //     // Get pricing method from settings
-    //     $pricingMethod = $this->getPricingMethod();
-
-    //     $pricingDetails = [
-    //         'pricing_method' => $this->getPricingMethodText($pricingMethod),
-    //         'initial_estimated_price' => $order->total_price_before_discount,
-    //         'initial_discount' => $order->discount_value,
-    //         'price_updated' => false,
-    //         'coupon_recalculated' => false,
-    //     ];
-
-    //     $newCalculatedPrice = $order->total_price_before_discount; // Default to original price
-    //     $discountValue = $order->discount_value; // Default to existing discount
-
-    //     if ($pricingMethod == 1 && $order->trip_started_at) {
-    //         // Time-based pricing calculation with morning/evening rates
-    //         $tripDurationMinutes = $order->trip_started_at->diffInMinutes(now());
-
-    //         // Get pricing based on current time period
-    //         $timePricing = $this->getTimePeriodPricing($order->service);
-
-    //         $pricePerMinute = $timePricing['price_per_minute'];
-    //         $startPrice = $timePricing['start_price'];
-    //         $realPriceBasedOnTime = $tripDurationMinutes * $pricePerMinute;
-    //         $newCalculatedPrice = $startPrice + $realPriceBasedOnTime;
-
-    //         $pricingDetails = array_merge($pricingDetails, [
-    //             'price_updated' => true,
-    //             'time_period' => $timePricing['period'],
-    //             'trip_duration_minutes' => $tripDurationMinutes,
-    //             'price_per_minute' => $pricePerMinute,
-    //             'service_start_price' => $startPrice,
-    //             'time_based_price' => $realPriceBasedOnTime,
-    //             'new_calculated_price' => $newCalculatedPrice,
-    //         ]);
-
-    //         // Recalculate coupon discount if order has a coupon and price changed
-    //         if ($order->coupon_id && $newCalculatedPrice != $order->total_price_before_discount) {
-    //             $coupon = $order->coupon;
-
-    //             if ($coupon && $coupon->isValid()) {
-    //                 // Check if new price still meets minimum amount requirement
-    //                 if ($newCalculatedPrice >= $coupon->minimum_amount) {
-    //                     // Recalculate discount based on new price
-    //                     if ($coupon->discount_type == 1) { // Fixed amount
-    //                         $discountValue = $coupon->discount;
-    //                     } else { // Percentage
-    //                         $discountValue = ($newCalculatedPrice * $coupon->discount) / 100;
-    //                     }
-
-    //                     // Ensure discount doesn't exceed total price
-    //                     $discountValue = min($discountValue, $newCalculatedPrice);
-
-    //                     $pricingDetails['coupon_recalculated'] = true;
-    //                     $pricingDetails['coupon_valid_for_new_price'] = true;
-    //                     $pricingDetails['new_discount_value'] = $discountValue;
-
-    //                     Log::info("Coupon discount recalculated for order {$order->id}: old discount {$order->discount_value}, new discount {$discountValue}");
-    //                 } else {
-    //                     // New price doesn't meet minimum requirement, remove coupon discount
-    //                     $discountValue = 0;
-    //                     $pricingDetails['coupon_recalculated'] = true;
-    //                     $pricingDetails['coupon_valid_for_new_price'] = false;
-    //                     $pricingDetails['coupon_removed_reason'] = 'New price below minimum amount requirement';
-
-    //                     Log::info("Coupon discount removed for order {$order->id} - new price {$newCalculatedPrice} below minimum {$coupon->minimum_amount}");
-    //                 }
-    //             } else {
-    //                 // Coupon is no longer valid, remove discount
-    //                 $discountValue = 0;
-    //                 $pricingDetails['coupon_recalculated'] = true;
-    //                 $pricingDetails['coupon_valid_for_new_price'] = false;
-    //                 $pricingDetails['coupon_removed_reason'] = 'Coupon expired or inactive';
-
-    //                 Log::info("Coupon discount removed for order {$order->id} - coupon no longer valid");
-    //             }
-    //         }
-    //     } else {
-    //         // Distance-based pricing (keep original price)
-    //         $pricingDetails = array_merge($pricingDetails, [
-    //             'new_calculated_price' => $newCalculatedPrice,
-    //             'note' => $pricingMethod == 2
-    //                 ? 'Price calculated based on distance, no time adjustment applied'
-    //                 : 'Trip start time not found, using original price'
-    //         ]);
-    //     }
-
-    //     // ========== ADD IN-TRIP WAITING CHARGES (for traffic stops, etc.) ==========
-    //     // Only apply when pricing method is "both" (3) and mobile sent waiting minutes
-    //     if ($pricingMethod == 3 && $order->in_trip_waiting_minutes > 0) {
-    //         $inTripWaitingMinutes = $order->in_trip_waiting_minutes;
-    //         $chargePerMinute = $order->service->waiting_charge_per_minute_when_order_active ?? 0;
-
-    //         $inTripWaitingCharges = $inTripWaitingMinutes * $chargePerMinute;
-
-    //         $pricingDetails['in_trip_waiting_charges'] = [
-    //             'in_trip_waiting_minutes' => $inTripWaitingMinutes,
-    //             'charge_per_minute' => $chargePerMinute,
-    //             'total_charges' => round($inTripWaitingCharges, 2),
-    //             'description' => 'Charges for stopped time during trip (traffic, lights, etc.)'
-    //         ];
-
-    //         // Add in-trip waiting charges to the calculated price
-    //         $newCalculatedPrice += $inTripWaitingCharges;
-    //         $pricingDetails['new_calculated_price'] = $newCalculatedPrice;
-    //         $pricingDetails['price_includes_in_trip_waiting'] = true;
-
-    //         Log::info("Order {$order->id}: In-trip waiting charges calculated", [
-    //             'waiting_minutes' => $inTripWaitingMinutes,
-    //             'charge_per_minute' => $chargePerMinute,
-    //             'total_charges' => $inTripWaitingCharges
-    //         ]);
-    //     }
-    //     // ========== END IN-TRIP WAITING CHARGES ==========
-
-    //     // Calculate final price after discount
-    //     $finalPrice = $newCalculatedPrice - $discountValue;
-
-    //     $pricingDetails['final_discount_value'] = $discountValue;
-    //     $pricingDetails['final_price'] = $finalPrice;
-
-    //     // Calculate commission based on final price using service commission
-    //     $priceCalculation = $this->calculateCommissionAndNetPrice($order->service_id, $finalPrice);
-
-    //     $pricingDetails = array_merge($pricingDetails, [
-    //         'commission_type' => $priceCalculation['commission_type'],
-    //         'commission_value' => $priceCalculation['commission_value'],
-    //         'admin_commission' => $priceCalculation['admin_commission'],
-    //         'net_price_for_driver' => $priceCalculation['net_price_for_driver']
-    //     ]);
-
-    //     return $pricingDetails;
-    // }
-
-    // /**
-    //  * Get pricing calculation method from settings
-    //  * 1 = time-based, 2 = distance-based, 3 = both
-    //  */
-    // private function getPricingMethod()
-    // {
-    //     return $this->getSettingValue('calculate_price_depend_on_time_or_distance_or_both', 2);
-    // }
-
-    // /**
-    //  * Get text representation of pricing method
-    //  */
-    // private function getPricingMethodText($method)
-    // {
-    //     switch ($method) {
-    //         case 1:
-    //             return 'time_based';
-    //         case 2:
-    //             return 'distance_based';
-    //         case 3:
-    //             return 'both_time_and_distance';
-    //         default:
-    //             return 'unknown';
-    //     }
-    // }
-
-
-    // /**
-    //  * Get setting value by key with default fallback
-    //  */
-    // private function getSettingValue($key, $default = 0)
-    // {
-    //     $setting = DB::table('settings')->where('key', $key)->first();
-    //     return $setting ? $setting->value : $default;
-    // }
-
-
-
-    // /**
-    //  * Calculate admin commission and driver net price using service commission
-    //  */
-    // private function calculateCommissionAndNetPrice($serviceId, $totalPrice)
-    // {
-    //     $commissionData = $this->getServiceCommission($serviceId, $totalPrice);
-    //     $adminCommission = $commissionData['admin_commission'];
-    //     $netPriceForDriver = $totalPrice - $adminCommission;
-
-    //     return [
-    //         'commission_type' => $commissionData['type_text'],
-    //         'commission_value' => $commissionData['commission_value'],
-    //         'admin_commission' => $adminCommission,
-    //         'net_price_for_driver' => $netPriceForDriver
-    //     ];
-    // }
 }

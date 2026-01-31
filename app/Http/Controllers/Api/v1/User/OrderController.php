@@ -153,315 +153,343 @@ class OrderController extends Controller
 
 
     public function createOrder(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'pick_name' => 'required',
-            'drop_name' => 'nullable',
-            'start_lat' => 'required|numeric',
-            'start_lng' => 'required|numeric',
-            'end_lat'   => 'nullable|numeric',
-            'end_lng'   => 'nullable|numeric',
-            'service_id' => 'required|exists:services,id',
-            'total_price_before_discount' => 'nullable|numeric|min:0',
-            'payment_method' => ['nullable', Rule::in(array_column(PaymentMethod::cases(), 'value'))],
-            'coupon_code' => 'nullable|string|exists:coupons,code',
-        ]);
+{
+    $validator = Validator::make($request->all(), [
+        'pick_name' => 'required',
+        'drop_name' => 'nullable',
+        'start_lat' => 'required|numeric',
+        'start_lng' => 'required|numeric',
+        'end_lat'   => 'nullable|numeric',
+        'end_lng'   => 'nullable|numeric',
+        'service_id' => 'required|exists:services,id',
+        'total_price_before_discount' => 'nullable|numeric|min:0',
+        'payment_method' => ['nullable', Rule::in(array_column(PaymentMethod::cases(), 'value'))],
+        'coupon_code' => 'nullable|string|exists:coupons,code',
+    ]);
 
-        if ($validator->fails()) {
+    if ($validator->fails()) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Validation failed',
+            'errors' => $validator->errors()
+        ], 422);
+    }
+
+    try {
+        $service = Service::where('id', $request->service_id)
+            ->where('activate', 1)
+            ->first();
+
+        if (!$service) {
             return response()->json([
                 'status' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
+                'message' => 'Service not found or inactive'
+            ], 404);
         }
 
-        try {
-            $service = Service::where('id', $request->service_id)
+        // Default to cash if not provided
+        $paymentMethodValue = $request->payment_method ?? PaymentMethod::Cash->value;
+
+        $isPaymentSupported = ServicePayment::where('service_id', $request->service_id)
+            ->where('payment_method', $paymentMethodValue)
+            ->exists();
+
+        if (!$isPaymentSupported) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Payment method not supported for this service'
+            ], 200);
+        }
+
+        $number = Order::generateOrderNumber();
+
+        // Calculate price if not provided
+        $calculatedPrice = $request->total_price_before_discount;
+        if (!$calculatedPrice) {
+            $distance = 0;
+
+            if (!is_null($request->end_lat) && !is_null($request->end_lng)) {
+                $distance = $this->calculateDistanceOSRM(
+                    $request->start_lat,
+                    $request->start_lng,
+                    $request->end_lat,
+                    $request->end_lng
+                );
+            }
+
+            $isEvening = $this->isEveningTime();
+            $startPrice = $isEvening ? $service->start_price_evening : $service->start_price_morning;
+            $pricePerKm = $isEvening ? $service->price_per_km_evening : $service->price_per_km_morning;
+
+            $calculatedPrice = $startPrice + ($pricePerKm * $distance);
+        }
+
+        // Initialize discount variables
+        $discountValue = 0;
+        $couponId = null;
+        $finalPrice = $calculatedPrice;
+
+        // Handle coupon validation and discount calculation
+        if ($request->coupon_code) {
+            $coupon = Coupon::where('code', $request->coupon_code)
                 ->where('activate', 1)
                 ->first();
 
-            if (!$service) {
+            if (!$coupon) {
                 return response()->json([
                     'status' => false,
-                    'message' => 'Service not found or inactive'
-                ], 404);
-            }
-
-            // Default to cash if not provided
-            $paymentMethodValue = $request->payment_method ?? PaymentMethod::Cash->value;
-
-            $isPaymentSupported = ServicePayment::where('service_id', $request->service_id)
-                ->where('payment_method', $paymentMethodValue)
-                ->exists();
-
-            if (!$isPaymentSupported) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Payment method not supported for this service'
+                    'type' => 'coupon_not_found',
+                    'message' => 'Coupon not found or inactive'
                 ], 200);
             }
 
-            $number = Order::generateOrderNumber();
-
-            // Calculate price if not provided
-            $calculatedPrice = $request->total_price_before_discount;
-            if (!$calculatedPrice) {
-                $distance = 0;
-
-                if (!is_null($request->end_lat) && !is_null($request->end_lng)) {
-                    $distance = $this->calculateDistanceOSRM(
-                        $request->start_lat,
-                        $request->start_lng,
-                        $request->end_lat,
-                        $request->end_lng
-                    );
-                }
-
-                $isEvening = $this->isEveningTime();
-                $startPrice = $isEvening ? $service->start_price_evening : $service->start_price_morning;
-                $pricePerKm = $isEvening ? $service->price_per_km_evening : $service->price_per_km_morning;
-
-                $calculatedPrice = $startPrice + ($pricePerKm * $distance);
+            if (!$coupon->isValid()) {
+                return response()->json([
+                    'status' => false,
+                    'type' => 'expired',
+                    'message' => 'Coupon has expired or not yet active'
+                ], 200);
             }
 
-            // Initialize discount variables
-            $discountValue = 0;
-            $couponId = null;
-            $finalPrice = $calculatedPrice;
+            $userUsageCount = DB::table('user_coupons')
+                ->where('user_id', auth()->id())
+                ->where('coupon_id', $coupon->id)
+                ->count();
 
-            // Handle coupon validation and discount calculation
-            if ($request->coupon_code) {
-                $coupon = Coupon::where('code', $request->coupon_code)
-                    ->where('activate', 1)
-                    ->first();
+            if (!is_null($coupon->number_of_used) && $userUsageCount >= $coupon->number_of_used) {
+                return response()->json([
+                    'status' => false,
+                    'type' => 'coupon_usage_limit_reached',
+                    'message' => 'You have reached the maximum usage limit for this coupon'
+                ], 200);
+            }
 
-                if (!$coupon) {
-                    return response()->json([
-                        'status' => false,
-                        'type' => 'coupon_not_found',
-                        'message' => 'Coupon not found or inactive'
-                    ], 200);
-                }
+            if ($calculatedPrice < $coupon->minimum_amount) {
+                return response()->json([
+                    'status' => false,
+                    'type' => 'minimum_amount',
+                    'message' => 'Order amount does not meet minimum requirement for this coupon'
+                ], 200);
+            }
 
-                if (!$coupon->isValid()) {
-                    return response()->json([
-                        'status' => false,
-                        'type' => 'expired',
-                        'message' => 'Coupon has expired or not yet active'
-                    ], 200);
-                }
-
-                $userUsageCount = DB::table('user_coupons')
-                    ->where('user_id', auth()->id())
-                    ->where('coupon_id', $coupon->id)
+            if ($coupon->coupon_type == 2) {
+                $previousOrdersCount = Order::where('user_id', auth()->id())
+                    ->whereIn('status', ['completed'])
                     ->count();
 
-                if (!is_null($coupon->number_of_used) && $userUsageCount >= $coupon->number_of_used) {
+                if ($previousOrdersCount > 0) {
                     return response()->json([
                         'status' => false,
-                        'type' => 'coupon_usage_limit_reached',
-                        'message' => 'You have reached the maximum usage limit for this coupon'
+                        'type' => 'coupon_first_ride_only',
+                        'message' => 'This coupon is only valid for first ride'
                     ], 200);
                 }
-
-                if ($calculatedPrice < $coupon->minimum_amount) {
+            } elseif ($coupon->coupon_type == 3) {
+                if ($coupon->service_id != $request->service_id) {
                     return response()->json([
                         'status' => false,
-                        'type' => 'minimum_amount',
-                        'message' => 'Order amount does not meet minimum requirement for this coupon'
-                    ], 200);
-                }
-
-                if ($coupon->coupon_type == 2) {
-                    $previousOrdersCount = Order::where('user_id', auth()->id())
-                        ->whereIn('status', ['completed'])
-                        ->count();
-
-                    if ($previousOrdersCount > 0) {
-                        return response()->json([
-                            'status' => false,
-                            'type' => 'coupon_first_ride_only',
-                            'message' => 'This coupon is only valid for first ride'
-                        ], 200);
-                    }
-                } elseif ($coupon->coupon_type == 3) {
-                    if ($coupon->service_id != $request->service_id) {
-                        return response()->json([
-                            'status' => false,
-                            'type' => 'coupon_invalid_service',
-                            'message' => 'This coupon is not valid for the selected service'
-                        ], 200);
-                    }
-                }
-
-                if ($coupon->discount_type == 1) {
-                    $discountValue = $coupon->discount;
-                } else {
-                    $discountValue = ($calculatedPrice * $coupon->discount) / 100;
-                }
-
-                $discountValue = min($discountValue, $calculatedPrice);
-                $finalPrice = $calculatedPrice - $discountValue;
-                $couponId = $coupon->id;
-            }
-
-            // ========== ✅ SEPARATE BALANCE CHECK FOR EACH PAYMENT METHOD ==========
-            $user = auth()->user();
-
-            if ($paymentMethodValue === PaymentMethod::AppCredit->value) {
-                // ✅ التحقق من رصيد التطبيق فقط
-                $appCreditEnabled = DB::table('settings')
-                    ->where('key', 'enable_app_credit_distribution_system')
-                    ->value('value') == 1;
-
-                if (!$appCreditEnabled) {
-                    return response()->json([
-                        'status' => false,
-                        'type' => 'app_credit_disabled',
-                        'message' => 'نظام رصيد التطبيق غير مفعل حالياً',
-                    ], 200);
-                }
-
-                $availableAppCredit = $user->getAvailableAppCreditForOrder();
-
-                if ($availableAppCredit < $finalPrice) {
-                    return response()->json([
-                        'status' => false,
-                        'type' => 'insufficient_app_credit',
-                        'message' => 'رصيد التطبيق غير كافٍ',
-                        'data' => [
-                            'app_credit_available' => $availableAppCredit,
-                            'app_credit_orders_remaining' => $user->app_credit_orders_remaining,
-                            'app_credit_amount_per_order' => $user->app_credit_amount_per_order,
-                            'required_amount' => $finalPrice,
-                            'shortage' => $finalPrice - $availableAppCredit,
-                        ]
-                    ], 200);
-                }
-            } elseif ($paymentMethodValue === PaymentMethod::Wallet->value) {
-                // ✅ التحقق من المحفظة الحقيقية فقط
-                $realWalletBalance = $user->balance;
-
-                if ($realWalletBalance < $finalPrice) {
-                    return response()->json([
-                        'status' => false,
-                        'type' => 'insufficient_wallet_balance',
-                        'message' => 'رصيد المحفظة غير كافٍ',
-                        'data' => [
-                            'wallet_balance' => $realWalletBalance,
-                            'required_amount' => $finalPrice,
-                            'shortage' => $finalPrice - $realWalletBalance,
-                        ]
+                        'type' => 'coupon_invalid_service',
+                        'message' => 'This coupon is not valid for the selected service'
                     ], 200);
                 }
             }
 
-            // Use DB transaction to ensure data consistency
-            DB::beginTransaction();
+            if ($coupon->discount_type == 1) {
+                $discountValue = $coupon->discount;
+            } else {
+                $discountValue = ($calculatedPrice * $coupon->discount) / 100;
+            }
 
-            try {
-                $order = Order::create([
-                    'number' => $number,
-                    'status' => OrderStatus::Pending,
-                    'payment_method' => PaymentMethod::from($paymentMethodValue),
-                    'status_payment' => StatusPayment::Pending,
-                    'total_price_before_discount' => $calculatedPrice,
-                    'discount_value' => $discountValue,
-                    'total_price_after_discount' => $finalPrice,
-                    'net_price_for_driver' => $finalPrice,
-                    'commision_of_admin' => 1,
-                    'user_id' => auth()->id(),
-                    'service_id' => $request->service_id,
-                    'coupon_id' => $couponId,
-                    'pick_lat' => $request->start_lat,
-                    'pick_lng' => $request->start_lng,
-                    'pick_name' => $request->pick_name,
-                    'drop_name' => $request->drop_name,
-                    'drop_lat' => $request->end_lat,
-                    'drop_lng' => $request->end_lng,
-                    'estimated_time' => $this->calculateEstimatedTime(
-                        $request->start_lat,
-                        $request->start_lng,
-                        $request->end_lat,
-                        $request->end_lng
-                    ),
-                ]);
+            $discountValue = min($discountValue, $calculatedPrice);
+            $finalPrice = $calculatedPrice - $discountValue;
+            $couponId = $coupon->id;
+        }
 
-                // Record coupon usage if applied
-                if ($couponId) {
-                    DB::table('user_coupons')->insert([
-                        'coupon_id' => $couponId,
-                        'user_id' => auth()->id(),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                }
-
-                DB::commit();
-
-                // Start driver search
-                $result = $this->driverLocationService->findAndStoreOrderInFirebase(
-                    $request->start_lat,
-                    $request->start_lng,
-                    $order->id,
-                    $request->service_id,
-                    null,
-                    OrderStatus::Pending->value,
-                    false
-                );
-
-                $searchEnded = ($result['next_radius'] === null);
-
-                if ($searchEnded) {
-                    $this->driverLocationService->updateEndSearchFlag($order->id, true);
-                }
-
-                if (isset($result['next_radius']) && $result['next_radius'] !== null) {
-                    \Log::info("Driver search will continue - next zone: {$result['next_radius']}km for order {$order->id}");
-                } elseif (isset($result['search_complete']) && $result['search_complete'] === true) {
-                    \Log::info("Driver search completed - all zones searched for order {$order->id}");
-                }
-
+        // ========== ✅ BALANCE CHECK FOR APP CREDIT - Only check for amount_per_order ==========
+        $user = auth()->user();
+        
+        if ($paymentMethodValue === PaymentMethod::AppCredit->value) {
+            // ✅ التحقق من توفر المبلغ المحدد لكل رحلة فقط (0.5 JD مثلاً)
+            $appCreditEnabled = DB::table('settings')
+                ->where('key', 'enable_app_credit_distribution_system')
+                ->value('value') == 1;
+            
+            if (!$appCreditEnabled) {
                 return response()->json([
-                    'status' => true,
-                    'message' => $result['success']
-                        ? 'Order created successfully. Searching for drivers in ' . ($result['search_radius'] ?? 5) . 'km radius.'
-                        : $result['message'],
+                    'status' => false,
+                    'type' => 'app_credit_disabled',
+                    'message' => 'نظام رصيد التطبيق غير مفعل حالياً',
+                ], 200);
+            }
+            
+            $availableAppCreditPerOrder = $user->getAvailableAppCreditForOrder();
+            
+            // ✅ فقط نتحقق من وجود رصيد للرحلة (0.5 JD)، مش من السعر الكلي
+            if ($availableAppCreditPerOrder <= 0) {
+                return response()->json([
+                    'status' => false,
+                    'type' => 'no_app_credit_available',
+                    'message' => 'لا يوجد رصيد تطبيق متاح لهذه الرحلة',
                     'data' => [
-                        'order' => $order->load(['service', 'coupon']),
-                        'service' => $service,
-                        'coupon_applied' => $couponId ? true : false,
-                        'discount_applied' => $discountValue,
-                        'driver_search' => [
-                            'drivers_found' => $result['drivers_found'] ?? 0,
-                            'current_search_radius' => $result['search_radius'] ?? 5,
-                            'next_search_radius' => $result['next_radius'] ?? null,
-                            'will_expand_search' => ($result['next_radius'] ?? null) !== null,
-                            'wait_time_seconds' => 30,
-                            'end_search' => $searchEnded,
-                            'status' => $result['success'] ? 'searching' : 'no_drivers_available'
-                        ],
-                        'user_location' => [
-                            'start_lat' => $request->start_lat,
-                            'start_lng' => $request->start_lng,
-                            'end_lat' => $request->end_lat,
-                            'end_lng' => $request->end_lng,
-                        ]
+                        'app_credit_available_per_order' => $availableAppCreditPerOrder,
+                        'app_credit_orders_remaining' => $user->app_credit_orders_remaining,
+                        'app_credit_amount_per_order' => $user->app_credit_amount_per_order,
+                        'total_order_price' => $finalPrice,
+                        'will_pay_from_app_credit' => 0,
+                        'will_pay_cash' => $finalPrice,
                     ]
                 ], 200);
-            } catch (\Exception $e) {
-                DB::rollBack();
-                throw $e;
             }
-        } catch (\Exception $e) {
-            \Log::error('Error creating order: ' . $e->getMessage());
+            
+            // ✅ حساب كم سيدفع من رصيد التطبيق وكم نقدي
+            $amountFromAppCredit = min($availableAppCreditPerOrder, $finalPrice);
+            $cashAmount = max(0, $finalPrice - $amountFromAppCredit);
+            
+        } 
+        elseif ($paymentMethodValue === PaymentMethod::Wallet->value) {
+            // ✅ التحقق من المحفظة الحقيقية فقط
+            $realWalletBalance = $user->balance;
+            
+            if ($realWalletBalance < $finalPrice) {
+                return response()->json([
+                    'status' => false,
+                    'type' => 'insufficient_wallet_balance',
+                    'message' => 'رصيد المحفظة غير كافٍ',
+                    'data' => [
+                        'wallet_balance' => $realWalletBalance,
+                        'required_amount' => $finalPrice,
+                        'shortage' => $finalPrice - $realWalletBalance,
+                    ]
+                ], 200);
+            }
+        }
+
+        // Use DB transaction to ensure data consistency
+        DB::beginTransaction();
+
+        try {
+            $order = Order::create([
+                'number' => $number,
+                'status' => OrderStatus::Pending,
+                'payment_method' => PaymentMethod::from($paymentMethodValue),
+                'status_payment' => StatusPayment::Pending,
+                'total_price_before_discount' => $calculatedPrice,
+                'discount_value' => $discountValue,
+                'total_price_after_discount' => $finalPrice,
+                'net_price_for_driver' => $finalPrice,
+                'commision_of_admin' => 1,
+                'user_id' => auth()->id(),
+                'service_id' => $request->service_id,
+                'coupon_id' => $couponId,
+                'pick_lat' => $request->start_lat,
+                'pick_lng' => $request->start_lng,
+                'pick_name' => $request->pick_name,
+                'drop_name' => $request->drop_name,
+                'drop_lat' => $request->end_lat,
+                'drop_lng' => $request->end_lng,
+                'estimated_time' => $this->calculateEstimatedTime(
+                    $request->start_lat,
+                    $request->start_lng,
+                    $request->end_lat,
+                    $request->end_lng
+                ),
+            ]);
+
+            // Record coupon usage if applied
+            if ($couponId) {
+                DB::table('user_coupons')->insert([
+                    'coupon_id' => $couponId,
+                    'user_id' => auth()->id(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            DB::commit();
+
+            // Start driver search
+            $result = $this->driverLocationService->findAndStoreOrderInFirebase(
+                $request->start_lat,
+                $request->start_lng,
+                $order->id,
+                $request->service_id,
+                null,
+                OrderStatus::Pending->value,
+                false
+            );
+
+            $searchEnded = ($result['next_radius'] === null);
+
+            if ($searchEnded) {
+                $this->driverLocationService->updateEndSearchFlag($order->id, true);
+            }
+
+            if (isset($result['next_radius']) && $result['next_radius'] !== null) {
+                \Log::info("Driver search will continue - next zone: {$result['next_radius']}km for order {$order->id}");
+            } elseif (isset($result['search_complete']) && $result['search_complete'] === true) {
+                \Log::info("Driver search completed - all zones searched for order {$order->id}");
+            }
+
+            // ✅ إضافة معلومات الدفع بالنسبة لرصيد التطبيق
+            $paymentBreakdown = null;
+            if ($paymentMethodValue === PaymentMethod::AppCredit->value) {
+                $paymentBreakdown = [
+                    'payment_method' => 'app_credit',
+                    'total_order_price' => $finalPrice,
+                    'app_credit_available_per_order' => $availableAppCreditPerOrder,
+                    'amount_from_app_credit' => $amountFromAppCredit,
+                    'amount_cash_required' => $cashAmount,
+                    'orders_remaining' => $user->app_credit_orders_remaining,
+                    'message_ar' => $cashAmount > 0 
+                        ? "سيتم خصم {$amountFromAppCredit} JD من رصيد التطبيق والباقي {$cashAmount} JD نقداً"
+                        : "سيتم خصم {$amountFromAppCredit} JD من رصيد التطبيق",
+                    'message_en' => $cashAmount > 0
+                        ? "JD {$amountFromAppCredit} will be deducted from app credit and JD {$cashAmount} cash"
+                        : "JD {$amountFromAppCredit} will be deducted from app credit"
+                ];
+            }
 
             return response()->json([
-                'status' => false,
-                'message' => 'Error creating order: ' . $e->getMessage()
-            ], 500);
+                'status' => true,
+                'message' => $result['success']
+                    ? 'Order created successfully. Searching for drivers in ' . ($result['search_radius'] ?? 5) . 'km radius.'
+                    : $result['message'],
+                'data' => [
+                    'order' => $order->load(['service', 'coupon']),
+                    'service' => $service,
+                    'coupon_applied' => $couponId ? true : false,
+                    'discount_applied' => $discountValue,
+                    'payment_breakdown' => $paymentBreakdown, // ✅ معلومات الدفع
+                    'driver_search' => [
+                        'drivers_found' => $result['drivers_found'] ?? 0,
+                        'current_search_radius' => $result['search_radius'] ?? 5,
+                        'next_search_radius' => $result['next_radius'] ?? null,
+                        'will_expand_search' => ($result['next_radius'] ?? null) !== null,
+                        'wait_time_seconds' => 30,
+                        'end_search' => $searchEnded,
+                        'status' => $result['success'] ? 'searching' : 'no_drivers_available'
+                    ],
+                    'user_location' => [
+                        'start_lat' => $request->start_lat,
+                        'start_lng' => $request->start_lng,
+                        'end_lat' => $request->end_lat,
+                        'end_lng' => $request->end_lng,
+                    ]
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
         }
+    } catch (\Exception $e) {
+        \Log::error('Error creating order: ' . $e->getMessage());
+
+        return response()->json([
+            'status' => false,
+            'message' => 'Error creating order: ' . $e->getMessage()
+        ], 500);
     }
+}
 
     /**
      * Determine if current time is evening

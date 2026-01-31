@@ -163,14 +163,14 @@ class OrderDriverController extends Controller
     }
 
 
-    public function show($id)
+ public function show($id)
 {
     $driver = Auth::guard('driver-api')->user();
 
     $order = Order::where('id', $id)
         ->where('driver_id', $driver->id)
         ->with([
-            'user:id,name,phone,country_code,photo,fcm_token,balance',
+            'user:id,name,phone,country_code,photo,fcm_token,balance,app_credit,app_credit_orders_remaining',
             'driver.ratings',
             'driver',
             'service',
@@ -189,9 +189,41 @@ class OrderDriverController extends Controller
     $order->distance = $order->getDistance();
     $order->discount_percentage = $order->getDiscountPercentage();
 
-    // ========== HYBRID PAYMENT CALCULATION FOR DRIVER ==========
+    // ========== ✅ APP CREDIT PAYMENT BREAKDOWN FOR DRIVER ==========
     $paymentBreakdown = null;
+    
     if ($order->status == OrderStatus::waitingPayment && 
+        $order->payment_method == PaymentMethod::AppCredit &&
+        $order->user) {
+        
+        $amountFromAppCredit = $order->app_credit_amount_used;
+        $cashAmount = $order->cash_amount_due;
+        $totalAmount = $order->total_price_after_discount;
+        
+        if ($cashAmount > 0) {
+            // Hybrid payment
+            $paymentBreakdown = [
+                'payment_type' => 'hybrid_app_credit_cash',
+                'total_amount' => $totalAmount,
+                'amount_from_app_credit' => $amountFromAppCredit,
+                'amount_cash_to_collect' => $cashAmount,
+                'message_ar' => "سيتم تحويل {$amountFromAppCredit} JD من رصيد تطبيق المستخدم إلى محفظتك، وستقوم بتحصيل {$cashAmount} JD نقداً",
+                'message_en' => "JD {$amountFromAppCredit} will be transferred from user app credit to your wallet, and you will collect JD {$cashAmount} in cash"
+            ];
+        } else {
+            // Full app credit payment
+            $paymentBreakdown = [
+                'payment_type' => 'full_app_credit',
+                'total_amount' => $totalAmount,
+                'amount_from_app_credit' => $amountFromAppCredit,
+                'amount_cash_to_collect' => 0,
+                'message_ar' => "سيتم تحويل المبلغ كاملاً {$amountFromAppCredit} JD من رصيد تطبيق المستخدم",
+                'message_en' => "Full amount of JD {$amountFromAppCredit} will be transferred from user app credit"
+            ];
+        }
+    }
+    // ========== WALLET PAYMENT (existing code) ==========
+    elseif ($order->status == OrderStatus::waitingPayment && 
         $order->payment_method == PaymentMethod::Wallet &&
         $order->user) {
         
@@ -204,13 +236,13 @@ class OrderDriverController extends Controller
             $cashAmount = $finalPrice - $walletAmount;
             
             $paymentBreakdown = [
-                'payment_type' => 'hybrid',
+                'payment_type' => 'hybrid_wallet_cash',
                 'total_amount' => $finalPrice,
                 'user_wallet_balance' => $userBalance,
                 'amount_from_wallet' => $walletAmount,
                 'amount_cash_to_collect' => $cashAmount,
-                'message' => 'سيتم تحويل ' . number_format($walletAmount, 2) . ' JD من محفظة المستخدم إلى محفظتك، وستقوم بتحصيل ' . number_format($cashAmount, 2) . ' JD نقداً',
-                'message_en' => 'JD ' . number_format($walletAmount, 2) . ' will be transferred from user wallet to your wallet, and you will collect JD ' . number_format($cashAmount, 2) . ' in cash'
+                'message_ar' => "سيتم تحويل {$walletAmount} JD من محفظة المستخدم إلى محفظتك، وستقوم بتحصيل {$cashAmount} JD نقداً",
+                'message_en' => "JD {$walletAmount} will be transferred from user wallet to your wallet, and you will collect JD {$cashAmount} in cash"
             ];
         } else {
             // Full wallet payment
@@ -220,8 +252,8 @@ class OrderDriverController extends Controller
                 'user_wallet_balance' => $userBalance,
                 'amount_from_wallet' => $finalPrice,
                 'amount_cash_to_collect' => 0,
-                'message' => 'سيتم تحويل المبلغ كاملاً ' . number_format($finalPrice, 2) . ' JD من محفظة المستخدم',
-                'message_en' => 'Full amount of JD ' . number_format($finalPrice, 2) . ' will be transferred from user wallet'
+                'message_ar' => "سيتم تحويل المبلغ كاملاً {$finalPrice} JD من محفظة المستخدم",
+                'message_en' => "Full amount of JD {$finalPrice} will be transferred from user wallet"
             ];
         }
     }
