@@ -29,6 +29,7 @@ return new class extends Migration
            
 
             $table->decimal('app_credit_amount_used', 10, 2)->default(0);
+            $table->decimal('wallet_amount_used', 10, 2)->default(0);
             $table->decimal('cash_amount_due', 10, 2)->default(0);
             $table->boolean('is_hybrid_payment')->default(false);
 
