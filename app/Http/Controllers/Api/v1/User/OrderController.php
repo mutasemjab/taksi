@@ -23,7 +23,7 @@ use App\Enums\PaymentMethod;
 use App\Enums\StatusPayment;
 use Illuminate\Validation\Rule;
 use App\Services\OrderPaymentService;
-
+use Illuminate\Support\Facades\Http;
 
 class OrderController extends Controller
 {
@@ -47,8 +47,21 @@ class OrderController extends Controller
             $radius = $request->radius;
 
             $order = Order::find($orderId);
-            if (!$order || $order->status != OrderStatus::Pending) {
-                return response()->json(['success' => false]);
+
+            // ✅ Strict validation before proceeding
+            if (!$order) {
+                \Log::warning("updateOrderRadius: Order {$orderId} not found");
+                return response()->json(['success' => false, 'reason' => 'order_not_found']);
+            }
+
+            if ($order->status != OrderStatus::Pending) {
+                \Log::info("updateOrderRadius: Order {$orderId} no longer pending (status: {$order->status->value})");
+                return response()->json(['success' => false, 'reason' => 'order_not_pending']);
+            }
+
+            if ($order->driver_id) {
+                \Log::info("updateOrderRadius: Order {$orderId} already has driver {$order->driver_id}");
+                return response()->json(['success' => false, 'reason' => 'driver_already_assigned']);
             }
 
             // This runs in web context - has gRPC!
@@ -59,15 +72,19 @@ class OrderController extends Controller
                 $request->user_lng,
                 $orderId,
                 $request->service_id,
-                $radius * 1000,
+                $radius * 1000, // Convert km to meters
                 OrderStatus::Pending->value
             );
 
-            \Log::info("Updated Firebase for order {$orderId} at {$radius}km via HTTP");
+            \Log::info("Updated Firebase for order {$orderId} at {$radius}km via HTTP. Result: " . ($result['success'] ? 'success' : 'failed'));
 
-            return response()->json(['success' => true, 'result' => $result]);
+            return response()->json([
+                'success' => $result['success'],
+                'result' => $result,
+                'drivers_found' => $result['drivers_found'] ?? 0
+            ]);
         } catch (\Exception $e) {
-            \Log::error("Error in updateOrderRadius: " . $e->getMessage());
+            \Log::error("Error in updateOrderRadius for order {$orderId}: " . $e->getMessage());
             return response()->json(['success' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -193,7 +210,8 @@ class OrderController extends Controller
 
                 // Only calculate distance if both end_lat and end_lng are present
                 if (!is_null($request->end_lat) && !is_null($request->end_lng)) {
-                    $distance = $this->calculateDistance(
+                    // استخدام OSRM بدلاً من Haversine
+                    $distance = $this->calculateDistanceOSRM(
                         $request->start_lat,
                         $request->start_lng,
                         $request->end_lat,
@@ -300,22 +318,46 @@ class OrderController extends Controller
                 $couponId = $coupon->id;
             }
 
-            // Check wallet balance for wallet payment method
+            // ========== تحقق من رصيد المحفظة حسب نظام التوزيع ==========
             if ($paymentMethodValue === PaymentMethod::Wallet->value) {
-                $user = auth()->user();
+                    $user = auth()->user();
 
-                if ($user->balance < $finalPrice) {
-                    return response()->json([
-                        'status' => false,
-                        'type' => 'insufficient_balance',
-                        'message' => 'لا يوجد معك رصيد كافي في المحفظة',
-                        'data' => [
-                            'required_amount' => $finalPrice,
-                            'current_balance' => $user->balance,
-                            'shortage' => $finalPrice - $user->balance
-                        ]
-                    ], 200);
-                }
+                    // ========== رصيد التطبيق (App Credit) - منفصل عن المحفظة ==========
+                    $appCreditEnabled = DB::table('settings')
+                        ->where('key', 'enable_app_credit_distribution_system')
+                        ->value('value') == 1;
+                    
+                    $availableAppCredit = $user->getAvailableAppCreditForOrder();
+                    
+                    // ========== المحفظة الحقيقية (Real Wallet) - بدون تأثر بالتوزيع ==========
+                    $realWalletBalance = $user->balance;
+                    
+                    // حساب إجمالي الرصيد المتاح (رصيد التطبيق + المحفظة)
+                    $totalAvailableBalance = $availableAppCredit + $realWalletBalance;
+                    
+                    // التحقق من كفاية الرصيد الإجمالي
+                    if ($totalAvailableBalance < $finalPrice) {
+                        return response()->json([
+                            'status' => false,
+                            'type' => 'insufficient_balance',
+                            'message' => 'لا يوجد معك رصيد كافي',
+                            'data' => [
+                                'app_credit_system_active' => $appCreditEnabled,
+                                'app_credit_available' => $availableAppCredit,
+                                'app_credit_orders_remaining' => $appCreditEnabled ? $user->app_credit_orders_remaining : 0,
+                                'app_credit_amount_per_order' => $appCreditEnabled ? $user->app_credit_amount_per_order : 0,
+                                'real_wallet_balance' => $realWalletBalance,
+                                'total_available' => $totalAvailableBalance,
+                                'required_amount' => $finalPrice,
+                                'shortage' => $finalPrice - $totalAvailableBalance,
+                                'payment_breakdown' => [
+                                    'will_use_app_credit' => min($availableAppCredit, $finalPrice),
+                                    'will_use_wallet' => min($realWalletBalance, max(0, $finalPrice - $availableAppCredit)),
+                                    'still_needed' => max(0, $finalPrice - $totalAvailableBalance)
+                                ]
+                            ]
+                        ], 200);
+                    }
             }
 
             // Use DB transaction to ensure data consistency
@@ -349,7 +391,7 @@ class OrderController extends Controller
                     ),
                 ]);
 
-                // Record coupon usage if a coupon was applied
+                // Record coupon usage if applied
                 if ($couponId) {
                     DB::table('user_coupons')->insert([
                         'coupon_id' => $couponId,
@@ -361,22 +403,25 @@ class OrderController extends Controller
 
                 DB::commit();
 
-                // Get initial search radius from settings
-                $initialRadius = DB::table('settings')
-                    ->where('key', 'find_drivers_in_radius')
-                    ->value('value') ?? 5;
-
-                // Start progressive driver search in first zone (e.g., 5km)
+                // ✅ FIX: Start search immediately (no delay for first zone)
                 $result = $this->driverLocationService->findAndStoreOrderInFirebase(
                     $request->start_lat,
                     $request->start_lng,
                     $order->id,
                     $request->service_id,
-                    null, // Let the service use settings values
-                    OrderStatus::Pending->value
+                    null,
+                    OrderStatus::Pending->value,
+                    false // ✅ end_search flag starts as false
                 );
 
-                // If drivers found in first zone, schedule job for next zone after 30 seconds
+                $searchEnded = ($result['next_radius'] === null);
+
+                if ($searchEnded) {
+                    // ✅ Update end_search to true in Firebase immediately
+                    $this->driverLocationService->updateEndSearchFlag($order->id, true);
+                }
+
+                // ✅ FIX: Schedule next zone search ONLY if needed and order is still pending
                 if ($result['success'] && isset($result['next_radius']) && $result['next_radius'] !== null) {
                     \App\Jobs\SearchDriversInNextZone::dispatch(
                         $order->id,
@@ -384,13 +429,13 @@ class OrderController extends Controller
                         $request->service_id,
                         $request->start_lat,
                         $request->start_lng
-                    );
+                    )->delay(now()->addSeconds(30));
                 }
 
                 return response()->json([
                     'status' => true,
                     'message' => $result['success']
-                        ? 'Order created successfully. Searching for drivers in ' . ($result['search_radius'] ?? $initialRadius) . 'km radius.'
+                        ? 'Order created successfully. Searching for drivers in ' . ($result['search_radius'] ?? 5) . 'km radius.'
                         : $result['message'],
                     'data' => [
                         'order' => $order->load(['service', 'coupon']),
@@ -399,10 +444,11 @@ class OrderController extends Controller
                         'discount_applied' => $discountValue,
                         'driver_search' => [
                             'drivers_found' => $result['drivers_found'] ?? 0,
-                            'current_search_radius' => $result['search_radius'] ?? $initialRadius,
+                            'current_search_radius' => $result['search_radius'] ?? 5,
                             'next_search_radius' => $result['next_radius'] ?? null,
                             'will_expand_search' => ($result['next_radius'] ?? null) !== null,
                             'wait_time_seconds' => 30,
+                             'end_search' => $searchEnded,
                             'status' => $result['success'] ? 'searching' : 'no_drivers_available'
                         ],
                         'user_location' => [
@@ -438,7 +484,7 @@ class OrderController extends Controller
         return $hour >= 22 || $hour < 6;
     }
 
-    private function calculateDistance($lat1, $lng1, $lat2, $lng2)
+    private function calculateDistanceFallback($lat1, $lng1, $lat2, $lng2)
     {
         $earthRadius = 6371; // Radius in kilometers
 
@@ -456,6 +502,36 @@ class OrderController extends Controller
         return $earthRadius * $angle;
     }
 
+    private function calculateDistanceOSRM($lat1, $lng1, $lat2, $lng2)
+    {
+        try {
+            // OSRM format: longitude,latitude (reversed!)
+            $url = "https://router.project-osrm.org/route/v1/driving/"
+                . "{$lng1},{$lat1};"
+                . "{$lng2},{$lat2}"
+                . "?overview=false&alternatives=false&steps=false";
+
+            $response = Http::timeout(5)->get($url);
+
+            if ($response->successful()) {
+                $data = $response->json();
+
+                if ($data['code'] === 'Ok' && isset($data['routes'][0]['distance'])) {
+                    // Distance is in meters, convert to kilometers
+                    $distanceInMeters = $data['routes'][0]['distance'];
+                    return $distanceInMeters / 1000;
+                }
+            }
+
+            // If OSRM fails, fallback to Haversine
+            \Log::warning("OSRM failed for order distance calculation, using fallback");
+            return $this->calculateDistanceFallback($lat1, $lng1, $lat2, $lng2);
+        } catch (\Exception $e) {
+            // On exception, fallback to Haversine
+            \Log::warning("OSRM exception in order: " . $e->getMessage() . ", using fallback");
+            return $this->calculateDistanceFallback($lat1, $lng1, $lat2, $lng2);
+        }
+    }
     /**
      * Display a listing of the user's orders
      *
@@ -664,7 +740,6 @@ class OrderController extends Controller
             $isPendingOrder = $order->status === OrderStatus::Pending;
             $isDriverAccepted = $order->status === OrderStatus::DriverAccepted;
 
-            // Check if cancellation fee should be applied
             $cancellationFeeApplied = false;
             $cancellationFeeAmount = 0;
 
@@ -677,9 +752,20 @@ class OrderController extends Controller
                 }
             }
 
+            // ✅ Update status FIRST (stops all jobs)
+            $order->status = OrderStatus::UserCancelOrder;
+            $order->reason_for_cancel = $request->reason_for_cancel;
+            $order->save();
+
+            // ✅ Remove from Firebase
+            $this->removeOrderFromFirebase($id);
+
             if ($isPendingOrder) {
-                // Move pending order to spam_orders table
+                // ✅ Move to spam table (creates backup)
                 $spamOrder = $this->moveOrderToSpamTable($order, $request->reason_for_cancel);
+
+                // ✅ CRITICAL: Keep notification records, delete the order
+                // Since we removed cascade, notification records will remain
                 $order->delete();
 
                 $responseData = [
@@ -693,10 +779,7 @@ class OrderController extends Controller
                     'cancellation_fee_amount' => 0
                 ];
             } else {
-                // For non-pending orders, just update status
-                $order->status = OrderStatus::UserCancelOrder;
-                $order->reason_for_cancel = $request->reason_for_cancel;
-                $order->save();
+                // For non-pending orders, just update status (don't delete)
 
                 // Notify driver about cancellation
                 if ($order->driver_id) {
@@ -729,6 +812,25 @@ class OrderController extends Controller
         }
     }
 
+    // ✅ NEW: Helper method to remove order from Firebase
+    private function removeOrderFromFirebase($orderId)
+    {
+        try {
+            $projectId = config('firebase.project_id');
+            $baseUrl = "https://firestore.googleapis.com/v1/projects/{$projectId}/databases/(default)/documents";
+
+            $response = Http::timeout(5)->delete("{$baseUrl}/ride_requests/{$orderId}");
+
+            if ($response->successful()) {
+                \Log::info("Order {$orderId} removed from Firebase");
+            } else {
+                \Log::warning("Failed to remove order {$orderId} from Firebase: " . $response->body());
+            }
+        } catch (\Exception $e) {
+            \Log::error("Error removing order {$orderId} from Firebase: " . $e->getMessage());
+        }
+    }
+
     /**
      * Deduct cancellation fee from user's balance
      */
@@ -758,6 +860,7 @@ class OrderController extends Controller
     private function moveOrderToSpamTable($order, $reasonForCancel)
     {
         $spamOrder = OrderSpam::create([
+            'original_order_id' => $order->id,
             'number' => $order->number,
             'status' => OrderStatus::UserCancelOrder->value,
             'payment_method' => $order->payment_method->value,
@@ -797,7 +900,7 @@ class OrderController extends Controller
         }
 
         // Calculate distance using existing method
-        $distance = $this->calculateDistance($lat1, $lng1, $lat2, $lng2);
+        $distance = $this->calculateDistanceFallback($lat1, $lng1, $lat2, $lng2);
 
         // Average speed in km/h (you can adjust this based on your city/service type)
         $averageSpeed = 30; // 30 km/h for city driving
@@ -833,6 +936,4 @@ class OrderController extends Controller
             return "{$remainingMinutes} minute" . ($remainingMinutes > 1 ? 's' : '');
         }
     }
-
-  
 }

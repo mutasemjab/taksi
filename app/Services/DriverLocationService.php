@@ -11,6 +11,7 @@ use App\Http\Controllers\FCMController;
 use App\Models\OrderDriverNotified;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use App\Enums\OrderStatus;
 
 class DriverLocationService
 {
@@ -109,14 +110,45 @@ class DriverLocationService
         }
     }
 
+    public function updateEndSearchFlag($orderId, $endSearch = true)
+    {
+        try {
+            $firestoreData = [
+                'fields' => [
+                    'end_search' => [
+                        'booleanValue' => $endSearch
+                    ],
+                    'firebase_updated_at' => [
+                        'timestampValue' => now()->toIso8601String()
+                    ]
+                ]
+            ];
+
+            $response = Http::timeout(10)->patch(
+                "{$this->baseUrl}/ride_requests/{$orderId}?updateMask.fieldPaths=end_search&updateMask.fieldPaths=firebase_updated_at",
+                $firestoreData
+            );
+
+            if ($response->successful()) {
+                \Log::info("Updated end_search=" . ($endSearch ? 'true' : 'false') . " for order {$orderId} in Firebase");
+                return true;
+            } else {
+                \Log::error("Failed to update end_search for order {$orderId}: " . $response->body());
+                return false;
+            }
+        } catch (\Exception $e) {
+            \Log::error("Error updating end_search for order {$orderId}: " . $e->getMessage());
+            return false;
+        }
+    }
+
     /**
      * Progressive driver search with incremental radius expansion
      * Searches in zones (5km, 10km, 15km, etc.) with 30-second wait between zones
      */
-    public function findAndStoreOrderInFirebase($userLat, $userLng, $orderId, $serviceId, $radius = null, $orderStatus = 'pending')
+    public function findAndStoreOrderInFirebase($userLat, $userLng, $orderId, $serviceId, $radius = null, $orderStatus = 'pending', $endSearch = false)
     {
         try {
-            // Get radius settings from database
             $initialRadius = \DB::table('settings')
                 ->where('key', 'find_drivers_in_radius')
                 ->value('value') ?? 5;
@@ -125,29 +157,40 @@ class DriverLocationService
                 ->where('key', 'maximum_radius_to_find_drivers')
                 ->value('value') ?? 20;
 
-            // Override with provided radius if available (for backward compatibility)
             if ($radius !== null) {
-                $maximumRadius = $radius / 1000; // Convert meters to km if needed
+                $currentRadius = $radius / 1000;
+            } else {
+                $currentRadius = $initialRadius;
             }
 
-            // Create radius zones (5km, 10km, 15km, 20km, etc.)
             $radiusZones = [];
             for ($r = $initialRadius; $r <= $maximumRadius; $r += $initialRadius) {
                 $radiusZones[] = $r;
             }
 
-            // Ensure maximum radius is included if it's not a multiple of initial radius
             if (end($radiusZones) < $maximumRadius) {
                 $radiusZones[] = $maximumRadius;
             }
 
-            \Log::info("Starting progressive driver search for order {$orderId}. Zones: " . implode('km, ', $radiusZones) . 'km');
+            \Log::info("Progressive search for order {$orderId}. Current radius: {$currentRadius}km, All zones: " . implode('km, ', $radiusZones) . 'km');
 
-            // Step 1: Get available drivers from MySQL filtered by service
+            $order = Order::find($orderId);
+            if (!$order || $order->status != OrderStatus::Pending || $order->driver_id) {
+                \Log::warning("Order {$orderId} is not in valid state for driver search");
+                // ✅ Mark search as ended
+                $this->updateEndSearchFlag($orderId, true);
+                return [
+                    'success' => false,
+                    'message' => 'Order is not in valid state for driver search'
+                ];
+            }
+
             $availableDriverIds = $this->getAvailableDriversForService($serviceId, $orderId);
 
             if (empty($availableDriverIds)) {
-                \Log::warning("No available drivers found for service {$serviceId}. Checked criteria: online status, active account, sufficient balance, no active orders, service assignment.");
+                \Log::warning("No available drivers for service {$serviceId}");
+                // ✅ Mark search as ended if no drivers at all
+                $this->updateEndSearchFlag($orderId, true);
                 return [
                     'success' => false,
                     'message' => 'No available drivers found for this service'
@@ -156,61 +199,94 @@ class DriverLocationService
 
             \Log::info("Found " . count($availableDriverIds) . " available drivers for service {$serviceId}");
 
-            // Step 2: Get driver locations from Firestore using REST API
             $driversWithLocations = $this->getDriverLocationsFromFirestore($availableDriverIds);
 
             if (empty($driversWithLocations)) {
-                \Log::warning("No drivers with active locations found in Firestore for service {$serviceId}");
+                \Log::warning("No drivers with active locations for service {$serviceId}");
+                // ✅ Mark search as ended if no driver locations
+                $this->updateEndSearchFlag($orderId, true);
                 return [
                     'success' => false,
-                    'message' => 'No drivers with active locations found for this service'
+                    'message' => 'No drivers with active locations found'
                 ];
             }
 
-            \Log::info("Found " . count($driversWithLocations) . " drivers with active locations in Firestore");
+            \Log::info("Found " . count($driversWithLocations) . " drivers with locations");
+            \Log::info("Searching in {$currentRadius}km radius for order {$orderId}");
 
-            // Step 3: Progressive search through each radius zone
-            foreach ($radiusZones as $currentRadius) {
-                \Log::info("Searching for drivers within {$currentRadius}km radius for order {$orderId}");
+            $sortedDrivers = $this->sortDriversByDistance($driversWithLocations, $userLat, $userLng, $currentRadius);
 
-                // Calculate distances and sort for current radius
-                $sortedDrivers = $this->sortDriversByDistance($driversWithLocations, $userLat, $userLng, $currentRadius);
-
-                if (!empty($sortedDrivers)) {
-                    \Log::info("Found " . count($sortedDrivers) . " drivers within {$currentRadius}km for order {$orderId}");
-
-                    // Step 4: Write order data to Firebase
-                    $firebaseResult = $this->writeOrderToFirebase($orderId, $sortedDrivers, $serviceId, $orderStatus, $currentRadius);
-
-                    // Return success with zone information
+            if (!empty($sortedDrivers)) {
+                $order->refresh();
+                if ($order->status != OrderStatus::Pending || $order->driver_id) {
+                    \Log::warning("Order {$orderId} status changed before Firebase write");
+                    // ✅ Mark search as ended
+                    $this->updateEndSearchFlag($orderId, true);
                     return [
-                        'success' => $firebaseResult['success'],
-                        'drivers_found' => count($sortedDrivers),
-                        'drivers' => $sortedDrivers,
-                        'service_id' => $serviceId,
-                        'search_radius' => $currentRadius,
-                        'firebase_write' => $firebaseResult['success'] ? 'success' : 'failed',
-                        'message' => $firebaseResult['message'] ?? "Order data processed in {$currentRadius}km radius",
-                        'wait_time' => 30,
-                        'next_radius' => $this->getNextRadius($currentRadius, $radiusZones, $maximumRadius)
+                        'success' => false,
+                        'message' => 'Order status changed during search'
                     ];
                 }
 
-                // If this is not the last zone, log and continue to next zone
-                if ($currentRadius < $maximumRadius) {
-                    \Log::info("No drivers found within {$currentRadius}km for order {$orderId}. Will search in next zone after timeout.");
+                \Log::info("Found " . count($sortedDrivers) . " drivers in {$currentRadius}km radius for order {$orderId}");
+
+                // ✅ Determine if this is the final search
+                $nextRadius = null;
+                $currentIndex = array_search($currentRadius, $radiusZones);
+                if ($currentIndex !== false && $currentIndex < count($radiusZones) - 1) {
+                    $nextRadius = $radiusZones[$currentIndex + 1];
                 }
+
+                // ✅ If no next radius, search is ending
+                $searchEnding = ($nextRadius === null);
+
+                // ✅ Write to Firebase with end_search flag
+                $firebaseResult = $this->writeOrderToFirebase(
+                    $orderId,
+                    $sortedDrivers,
+                    $serviceId,
+                    $orderStatus,
+                    $currentRadius,
+                    $searchEnding // Pass the flag
+                );
+
+                return [
+                    'success' => $firebaseResult['success'],
+                    'drivers_found' => count($sortedDrivers),
+                    'drivers' => $sortedDrivers,
+                    'service_id' => $serviceId,
+                    'search_radius' => $currentRadius,
+                    'next_radius' => $nextRadius,
+                    'firebase_write' => $firebaseResult['success'] ? 'success' : 'failed',
+                    'message' => $firebaseResult['message'] ?? "Searching in {$currentRadius}km radius",
+                ];
             }
 
-            // If no drivers found in any zone
+            \Log::info("No drivers in {$currentRadius}km radius for order {$orderId}");
+
+            $nextRadius = null;
+            $currentIndex = array_search($currentRadius, $radiusZones);
+            if ($currentIndex !== false && $currentIndex < count($radiusZones) - 1) {
+                $nextRadius = $radiusZones[$currentIndex + 1];
+            }
+
+            // ✅ If no next radius and no drivers found, mark search as ended
+            if ($nextRadius === null) {
+                $this->updateEndSearchFlag($orderId, true);
+            }
+
             return [
                 'success' => false,
-                'message' => "No drivers found within maximum radius of {$maximumRadius}km for this service",
-                'searched_zones' => $radiusZones,
+                'message' => "No drivers found in {$currentRadius}km radius. Will expand search.",
+                'drivers_found' => 0,
+                'search_radius' => $currentRadius,
+                'next_radius' => $nextRadius,
                 'service_id' => $serviceId
             ];
         } catch (\Exception $e) {
             \Log::error('Error in findAndStoreOrderInFirebase: ' . $e->getMessage());
+            // ✅ Mark search as ended on error
+            $this->updateEndSearchFlag($orderId, true);
             return [
                 'success' => false,
                 'message' => 'Error processing request: ' . $e->getMessage()
@@ -218,17 +294,69 @@ class DriverLocationService
         }
     }
 
+
     /**
-     * Get the next radius zone
+     * ✅ IMPROVED: Hybrid distance calculation (Haversine + OSRM)
      */
-    private function getNextRadius($currentRadius, $radiusZones, $maximumRadius)
+    private function sortDriversByDistance(array $drivers, $userLat, $userLng, $maxRadius)
     {
-        $currentIndex = array_search($currentRadius, $radiusZones);
-        if ($currentIndex !== false && $currentIndex < count($radiusZones) - 1) {
-            return $radiusZones[$currentIndex + 1];
+        $driversWithDistance = [];
+
+        // Step 1: Fast Haversine filtering
+        $candidateDrivers = [];
+        foreach ($drivers as $driver) {
+            $roughDistance = $this->calculateDistanceFallback(
+                $userLat,
+                $userLng,
+                $driver['lat'],
+                $driver['lng']
+            );
+
+            // Keep drivers within radius + 20% buffer
+            if ($roughDistance <= ($maxRadius * 1.2)) {
+                $driver['rough_distance'] = $roughDistance;
+                $candidateDrivers[] = $driver;
+            }
         }
-        return null;
+
+        if (empty($candidateDrivers)) {
+            return [];
+        }
+
+        // Step 2: Sort by rough distance
+        usort($candidateDrivers, function ($a, $b) {
+            return $a['rough_distance'] <=> $b['rough_distance'];
+        });
+
+        // Step 3: Use OSRM for top 10 drivers only (performance optimization)
+        $maxDriversForOSRM = 10;
+        $topDrivers = array_slice($candidateDrivers, 0, $maxDriversForOSRM);
+
+        \Log::info("Calculating precise distance for " . count($topDrivers) . " drivers using OSRM");
+
+        foreach ($topDrivers as $driver) {
+            $preciseDistance = $this->calculateDistanceOSRM(
+                $userLat,
+                $userLng,
+                $driver['lat'],
+                $driver['lng']
+            );
+
+            // Only include within actual radius
+            if ($preciseDistance <= $maxRadius) {
+                $driver['distance'] = round($preciseDistance, 2);
+                $driversWithDistance[] = $driver;
+            }
+        }
+
+        // Sort by precise distance
+        usort($driversWithDistance, function ($a, $b) {
+            return $a['distance'] <=> $b['distance'];
+        });
+
+        return $driversWithDistance;
     }
+
 
     /**
      * Get available drivers from MySQL filtered by service
@@ -325,11 +453,9 @@ class DriverLocationService
 
                 // Check if there are more pages
                 $nextPageToken = $firestoreData['nextPageToken'] ?? null;
-
             } while ($nextPageToken); // Continue if there's a next page
 
             \Log::info("Fetched " . count($driversWithLocations) . " drivers with valid locations from Firestore");
-
         } catch (\Exception $e) {
             \Log::error('Error fetching from Firestore: ' . $e->getMessage());
         }
@@ -413,41 +539,48 @@ class DriverLocationService
         }
     }
 
+
     /**
-     * Sort drivers by distance from user location
+     * Calculate distance using OSRM (actual road distance)
+     * Returns distance in kilometers
+     * Falls back to Haversine formula if OSRM fails
      */
-    private function sortDriversByDistance(array $drivers, $userLat, $userLng, $maxRadius)
+    private function calculateDistanceOSRM($lat1, $lng1, $lat2, $lng2)
     {
-        $driversWithDistance = [];
+        try {
+            // OSRM format: longitude,latitude (reversed!)
+            $url = "https://router.project-osrm.org/route/v1/driving/"
+                . "{$lng1},{$lat1};"
+                . "{$lng2},{$lat2}"
+                . "?overview=false&alternatives=false&steps=false";
 
-        foreach ($drivers as $driver) {
-            $distance = $this->calculateDistance(
-                $userLat,
-                $userLng,
-                $driver['lat'],
-                $driver['lng']
-            );
+            $response = Http::timeout(5)->get($url);
 
-            // Only include drivers within the specified radius
-            if ($distance <= $maxRadius) {
-                $driver['distance'] = round($distance, 2);
-                $driversWithDistance[] = $driver;
+            if ($response->successful()) {
+                $data = $response->json();
+
+                if ($data['code'] === 'Ok' && isset($data['routes'][0]['distance'])) {
+                    // Distance is in meters, convert to kilometers
+                    $distanceInMeters = $data['routes'][0]['distance'];
+                    return $distanceInMeters / 1000;
+                }
             }
+
+            // If OSRM fails, fallback to Haversine
+            \Log::warning("OSRM failed for coordinates ({$lat1}, {$lng1}) to ({$lat2}, {$lng2}), using fallback");
+            return $this->calculateDistanceFallback($lat1, $lng1, $lat2, $lng2);
+        } catch (\Exception $e) {
+            // On exception, fallback to Haversine
+            \Log::warning("OSRM exception: " . $e->getMessage() . ", using fallback");
+            return $this->calculateDistanceFallback($lat1, $lng1, $lat2, $lng2);
         }
-
-        // Sort by distance (nearest first)
-        usort($driversWithDistance, function ($a, $b) {
-            return $a['distance'] <=> $b['distance'];
-        });
-
-        return $driversWithDistance;
     }
 
     /**
-     * Calculate distance between two coordinates using Haversine formula
+     * Fallback: Calculate distance using Haversine formula (straight line)
      * Returns distance in kilometers
      */
-    private function calculateDistance($lat1, $lng1, $lat2, $lng2)
+    private function calculateDistanceFallback($lat1, $lng1, $lat2, $lng2)
     {
         $earthRadius = 6371; // Earth's radius in kilometers
 
@@ -468,10 +601,9 @@ class DriverLocationService
      * Write complete order data and user information to Firebase using REST API
      * Maintains the EXACT same structure as before for mobile app compatibility
      */
-    private function writeOrderToFirebase($orderId, array $drivers, $serviceId, $orderStatus, $searchRadius = null)
+    private function writeOrderToFirebase($orderId, array $drivers, $serviceId, $orderStatus, $searchRadius = null, $endSearch = false)
     {
         try {
-            // Get the complete order with user and service relationships
             $order = Order::with(['user', 'service'])->find($orderId);
 
             if (!$order) {
@@ -481,31 +613,24 @@ class DriverLocationService
                 ];
             }
 
-            // Extract only driver IDs from the sorted drivers array
             $driverIDs = array_map(function ($driver) {
                 return $driver['id'];
             }, $drivers);
 
-            // ========================================
-            // SAVE NOTIFIED DRIVERS TO DATABASE
-            // ========================================
             try {
                 $notifiedCount = OrderDriverNotified::recordNotifiedDrivers($orderId, $drivers, $searchRadius);
                 \Log::info("Saved {$notifiedCount} notified drivers to database for order {$orderId}");
             } catch (\Exception $e) {
                 \Log::error("Failed to save notified drivers to database for order {$orderId}: " . $e->getMessage());
-                // Don't fail the entire process if database save fails
             }
 
-            // Prepare complete order data with user information - SAME STRUCTURE AS BEFORE
             $orderData = [
-                // Order basic information
                 'ride_id' => $orderId,
                 'order_number' => $order->number,
                 'status' => $orderStatus,
                 'service_id' => $serviceId,
+                'end_search' => $endSearch, // ✅ NEW: Add end_search flag
 
-                // User information
                 'user_id' => $order->user_id,
                 'user_info' => [
                     'id' => $order->user->id,
@@ -514,7 +639,6 @@ class DriverLocationService
                     'phone' => $order->user->phone ?? '',
                 ],
 
-                // Service information
                 'service_info' => [
                     'id' => $order->service->id,
                     'name' => $order->service->name ?? '',
@@ -522,7 +646,6 @@ class DriverLocationService
                     'waiting_time' => $order->service->waiting_time ?? '',
                 ],
 
-                // Location information
                 'pickup_location' => [
                     'name' => $order->pick_name,
                     'latitude' => $order->pick_lat,
@@ -534,7 +657,6 @@ class DriverLocationService
                     'longitude' => $order->drop_lng,
                 ],
 
-                // Pricing information
                 'pricing' => [
                     'total_price_before_discount' => $order->total_price_before_discount,
                     'discount_value' => $order->discount_value ?? 0,
@@ -543,44 +665,37 @@ class DriverLocationService
                     'commission_of_admin' => $order->commision_of_admin,
                 ],
 
-                // Payment information
                 'payment_info' => [
                     'payment_method' => $order->payment_method->value ?? 'cash',
                     'payment_status' => $order->status_payment->value ?? 'pending',
                 ],
 
-                // Driver information
                 'driver_ids' => $driverIDs,
                 'total_available_drivers' => count($driverIDs),
                 'assigned_driver_id' => $order->driver_id,
                 'search_radius_km' => $searchRadius,
 
-                // Additional information
                 'reason_for_cancel' => $order->reason_for_cancel,
                 'distance' => $order->getDistance(),
 
-                // Timestamps
                 'created_at' => $order->created_at->toIso8601String(),
                 'updated_at' => $order->updated_at->toIso8601String(),
                 'firebase_created_at' => now()->toIso8601String(),
                 'firebase_updated_at' => now()->toIso8601String(),
             ];
 
-            // Convert to Firestore format
             $firestoreData = [
                 'fields' => $this->convertToFirestoreFormat($orderData)['mapValue']['fields']
             ];
 
-            // Write to Firestore using PATCH to create or update
             $response = Http::timeout(10)->patch(
                 "{$this->baseUrl}/ride_requests/{$orderId}",
                 $firestoreData
             );
 
             if ($response->successful()) {
-                \Log::info("Complete order data for order {$orderId} written to Firebase with " . count($driverIDs) . " available drivers within {$searchRadius}km for service {$serviceId}");
+                \Log::info("Complete order data for order {$orderId} written to Firebase with end_search={$endSearch}");
 
-                // Send notifications to all drivers after successfully writing to Firebase
                 $this->sendNotificationsToDrivers($driverIDs, $orderId, $drivers, $order);
 
                 return [

@@ -8,25 +8,35 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Passport\HasApiTokens;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
 class User extends Authenticatable
 {
-   use HasApiTokens, HasFactory, Notifiable ,LogsActivity;
+    use HasApiTokens, HasFactory, Notifiable, LogsActivity;
 
-   protected $guarded = ['id'];
+    protected $guarded = ['id'];
 
-   protected $hidden = [
-      'password',
-      'remember_token',
-   ];
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
 
-   // Append the photo_url attribute to JSON responses
+    protected $casts = [
+        'balance' => 'decimal:2',
+        'app_credit' => 'decimal:2',
+        'app_credit_amount_per_order' => 'decimal:2',
+        'app_credit_orders_remaining' => 'integer',
+        'wallet_amount_per_order' => 'decimal:2',
+        'wallet_orders_remaining' => 'integer',
+    ];
+
+    // Append the photo_url attribute to JSON responses
     protected $appends = ['photo_url'];
-    
-     public function getActivitylogOptions(): LogOptions
+
+    public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
             ->logOnly(['*']) // Log all attributes, or specify: ['name', 'price', 'number_of_cards']
@@ -36,11 +46,11 @@ class User extends Authenticatable
             ->setDescriptionForEvent(fn(string $eventName) => "User has been {$eventName}");
     }
 
-       public function walletTransactions()
+    public function walletTransactions()
     {
         return $this->hasMany(WalletTransaction::class);
     }
-    
+
     // Add a custom accessor for the photo URL
     public function getPhotoUrlAttribute()
     {
@@ -49,10 +59,10 @@ class User extends Authenticatable
             $baseUrl = rtrim(config('app.url'), '/');
             return $baseUrl . '/assets/admin/uploads/' . $this->photo;
         }
-        
+
         return null;
     }
-    
+
     public function addBalance($amount, $note = null, $adminId = null, $userId = null)
     {
         $this->increment('balance', $amount);
@@ -66,7 +76,7 @@ class User extends Authenticatable
         ]);
     }
 
-     public function bans()
+    public function bans()
     {
         return $this->hasMany(UserBan::class);
     }
@@ -82,7 +92,7 @@ class User extends Authenticatable
     public function isBanned()
     {
         $activeBan = $this->activeBan;
-        
+
         if (!$activeBan) {
             return false;
         }
@@ -143,7 +153,7 @@ class User extends Authenticatable
 
         return true;
     }
-    
+
     /**
      * Relationships
      */
@@ -178,7 +188,7 @@ class User extends Authenticatable
 
         foreach ($challenges as $challenge) {
             $progress = $this->getChallengeProgress($challenge->id);
-            
+
             // Skip if user has completed max times
             if ($progress->times_completed >= $challenge->max_completions_per_user) {
                 continue;
@@ -186,5 +196,129 @@ class User extends Authenticatable
 
             $progress->incrementProgress($amount);
         }
+    }
+
+    // ========== رصيد التطبيق (App Credit) Methods ==========
+    
+    /**
+     * الحصول على المبلغ المتاح من رصيد التطبيق للرحلة الحالية
+     */
+    public function getAvailableAppCreditForOrder()
+    {
+        // التحقق من تفعيل نظام التوزيع
+        $distributionEnabled = DB::table('settings')
+            ->where('key', 'enable_app_credit_distribution_system')
+            ->value('value') == 1;
+        
+        // إذا لم يكن النظام مفعل، لا يوجد رصيد متاح
+        if (!$distributionEnabled) {
+            return 0;
+        }
+        
+        // إذا لم يكن هناك رحلات متبقية، لا يوجد رصيد متاح
+        if ($this->app_credit_orders_remaining <= 0) {
+            return 0;
+        }
+        
+        // إذا لم يكن هناك مبلغ محدد لكل رحلة، لا يوجد رصيد متاح
+        if ($this->app_credit_amount_per_order <= 0) {
+            return 0;
+        }
+        
+        // التحقق من أن الرصيد الفعلي كافي
+        $requiredAmount = min($this->app_credit_amount_per_order, $this->app_credit);
+        
+        return $requiredAmount;
+    }
+    
+    /**
+     * تقليل عداد الرحلات المتبقية في رصيد التطبيق
+     */
+    public function decrementAppCreditOrdersRemaining()
+    {
+        if ($this->app_credit_orders_remaining > 0) {
+            $this->decrement('app_credit_orders_remaining');
+            \Log::info("User {$this->id}: App credit orders remaining decremented to {$this->app_credit_orders_remaining}");
+        }
+    }
+    
+    /**
+     * تطبيق توزيع رصيد التطبيق على المستخدم
+     */
+    public function applyAppCreditDistribution($totalAmount, $numberOfOrders, $adminId = null)
+    {
+        $amountPerOrder = $numberOfOrders > 0 ? $totalAmount / $numberOfOrders : 0;
+        
+        $this->app_credit = $totalAmount;
+        $this->app_credit_amount_per_order = $amountPerOrder;
+        $this->app_credit_orders_remaining = $numberOfOrders;
+        $this->save();
+        
+        // تسجيل الحركة
+        DB::table('app_credit_transactions')->insert([
+            'user_id' => $this->id,
+            'admin_id' => $adminId,
+            'amount' => $totalAmount,
+            'type_of_transaction' => 1, // إضافة
+            'note' => "إضافة رصيد تطبيق: {$totalAmount} JD موزع على {$numberOfOrders} رحلة ({$amountPerOrder} JD لكل رحلة)",
+            'orders_remaining_before' => 0,
+            'orders_remaining_after' => $numberOfOrders,
+            'amount_per_order' => $amountPerOrder,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+        
+        \Log::info("User {$this->id}: App credit distribution applied - {$totalAmount} JD for {$numberOfOrders} orders");
+    }
+    
+    /**
+     * إزالة توزيع رصيد التطبيق من المستخدم
+     */
+    public function removeAppCreditDistribution()
+    {
+        $oldCredit = $this->app_credit;
+        
+        $this->app_credit = 0;
+        $this->app_credit_amount_per_order = 0;
+        $this->app_credit_orders_remaining = 0;
+        $this->save();
+        
+        if ($oldCredit > 0) {
+            // تسجيل الحركة
+            DB::table('app_credit_transactions')->insert([
+                'user_id' => $this->id,
+                'amount' => $oldCredit,
+                'type_of_transaction' => 2, // سحب
+                'note' => "إزالة توزيع رصيد التطبيق",
+                'orders_remaining_before' => $this->app_credit_orders_remaining,
+                'orders_remaining_after' => 0,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        }
+        
+        \Log::info("User {$this->id}: App credit distribution removed");
+    }
+
+    // ========== المحفظة الحقيقية (Real Wallet) Methods - بدون تأثر بالتوزيع ==========
+    
+    /**
+     * الحصول على رصيد المحفظة الحقيقية (بدون تأثير التوزيع)
+     */
+    public function getRealWalletBalance()
+    {
+        return $this->balance;
+    }
+    
+    // ========== Relations ==========
+    
+    public function orders()
+    {
+        return $this->hasMany(Order::class);
+    }
+    
+    public function appCreditTransactions()
+    {
+        return $this->hasMany(AppCreditTransaction::class);
     }
 }

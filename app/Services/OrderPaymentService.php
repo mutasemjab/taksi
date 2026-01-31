@@ -215,196 +215,250 @@ class OrderPaymentService
         Log::info("Visa payment processed for order {$order->id}: Driver earning {$driverBaseEarning}, Discount compensation {$discountValue}");
     }
 
+
     /**
-     * Process wallet payment
-     * - User pays DISCOUNTED price from wallet
-     * - Platform adds driver's earning to wallet  
-     * - Platform compensates driver for discount
+     * Process wallet payment (including hybrid wallet + cash and distribution system)
      */
-   /**
- * Process wallet payment (including hybrid wallet + cash)
- */
-private function processWalletPayment($order, $driver, $finalPrice, $driverBaseEarning, $discountValue, &$paymentDetails)
-{
-    $user = $order->user;
-    $userBalance = $user->balance;
+   private function processWalletPayment($order, $driver, $finalPrice, $driverBaseEarning, $discountValue, &$paymentDetails)
+    {
+        $user = $order->user;
 
-    // Determine if this is hybrid payment or full wallet payment
-    $isHybridPayment = $userBalance < $finalPrice;
-    $walletAmount = $isHybridPayment ? $userBalance : $finalPrice;
-    $cashAmount = $isHybridPayment ? ($finalPrice - $walletAmount) : 0;
-
-    // Update order with payment breakdown
-    $order->is_hybrid_payment = $isHybridPayment;
-    $order->wallet_amount_used = $walletAmount;
-    $order->cash_amount_due = $cashAmount;
-    $order->save();
-
-    if ($isHybridPayment) {
-        $paymentDetails['payment_type'] = 'hybrid_wallet_cash';
-        $paymentDetails['wallet_amount'] = $walletAmount;
-        $paymentDetails['cash_amount'] = $cashAmount;
-        $paymentDetails['message'] = "Hybrid payment: JD {$walletAmount} from wallet + JD {$cashAmount} cash";
+        // ========== الخطوة 1: تحديد مصادر الدفع ==========
+        $appCreditEnabled = DB::table('settings')
+            ->where('key', 'enable_app_credit_distribution_system')
+            ->value('value') == 1;
         
-        Log::info("Order {$order->id}: Hybrid payment - Wallet: {$walletAmount}, Cash: {$cashAmount}");
-    } else {
-        $paymentDetails['payment_type'] = 'full_wallet';
-        $paymentDetails['wallet_amount'] = $walletAmount;
-        $paymentDetails['cash_amount'] = 0;
+        $availableAppCredit = $user->getAvailableAppCreditForOrder();
+        $realWalletBalance = $user->balance;
         
-        Log::info("Order {$order->id}: Full wallet payment - Amount: {$walletAmount}");
-    }
-
-    // ========== STEP 1: Deduct available wallet amount from user ==========
-    if ($walletAmount > 0) {
-        DB::table('wallet_transactions')->insert([
-            'order_id' => $order->id,
-            'user_id' => $user->id,
-            'amount' => $walletAmount,
-            'type_of_transaction' => 2, // withdrawal
-            'note' => $isHybridPayment 
-                ? "الدفع الجزئي للطلب رقم {$order->id} عبر المحفظة (دفع هجين)" 
-                : "الدفع للطلب رقم {$order->id} عبر المحفظة",
-            'created_at' => now(),
-            'updated_at' => now()
-        ]);
-
-        DB::table('users')
-            ->where('id', $user->id)
-            ->decrement('balance', $walletAmount);
-
-        $paymentDetails['transactions_created'][] = [
-            'type' => 'user_wallet_deduction',
-            'amount' => $walletAmount,
-            'description' => $isHybridPayment 
-                ? 'Partial payment from user wallet (hybrid payment)'
-                : 'Full payment from user wallet'
-        ];
-    }
-
-    // ========== STEP 2: Transfer wallet amount to driver ==========
-    if ($walletAmount > 0) {
-        DB::table('wallet_transactions')->insert([
-            'order_id' => $order->id,
-            'driver_id' => $driver->id,
-            'amount' => $walletAmount,
-            'type_of_transaction' => 1, // addition
-            'note' => $isHybridPayment
-                ? "تحويل المبلغ من محفظة المستخدم للطلب رقم {$order->id} (دفع هجين)"
-                : "تحويل المبلغ من محفظة المستخدم للطلب رقم {$order->id}",
-            'created_at' => now(),
-            'updated_at' => now()
-        ]);
-
-        DB::table('drivers')
-            ->where('id', $driver->id)
-            ->increment('balance', $walletAmount);
-
-        $paymentDetails['transactions_created'][] = [
-            'type' => 'wallet_transfer_to_driver',
-            'amount' => $walletAmount,
-            'description' => 'Wallet amount transferred to driver'
-        ];
-    }
-
-    // ========== STEP 3: Calculate admin commission from FULL price ==========
-    // Commission is based on total price BEFORE discount
-    $totalPriceBeforeDiscount = $order->total_price_before_discount;
-    $commissionData = $this->getServiceCommission($order->service_id, $totalPriceBeforeDiscount);
-    $adminCommission = $commissionData['admin_commission'];
-
-    // Deduct admin commission from driver's wallet
-    DB::table('wallet_transactions')->insert([
-        'order_id' => $order->id,
-        'driver_id' => $driver->id,
-        'amount' => $adminCommission,
-        'type_of_transaction' => 2, // withdrawal
-        'note' => "خصم عمولة الإدارة للطلب رقم {$order->id}",
-        'created_at' => now(),
-        'updated_at' => now()
-    ]);
-
-    DB::table('drivers')
-        ->where('id', $driver->id)
-        ->decrement('balance', $adminCommission);
-
-    $paymentDetails['transactions_created'][] = [
-        'type' => 'admin_commission_deduction',
-        'amount' => $adminCommission,
-        'description' => 'Admin commission deducted from driver wallet (calculated from full price before discount)'
-    ];
-
-    // ========== STEP 4: Add discount compensation to driver ==========
-    if ($discountValue > 0) {
-        DB::table('wallet_transactions')->insert([
-            'order_id' => $order->id,
-            'driver_id' => $driver->id,
-            'amount' => $discountValue,
-            'type_of_transaction' => 1, // addition
-            'note' => "تعويض الكوبون للطلب رقم {$order->id}",
-            'created_at' => now(),
-            'updated_at' => now()
-        ]);
-
-        DB::table('drivers')
-            ->where('id', $driver->id)
-            ->increment('balance', $discountValue);
-
-        $paymentDetails['transactions_created'][] = [
-            'type' => 'discount_compensation',
-            'amount' => $discountValue,
-            'description' => 'Coupon discount compensation added to driver wallet'
-        ];
-    }
-
-    // ========== STEP 5: Handle cash portion (if hybrid) ==========
-    if ($isHybridPayment && $cashAmount > 0) {
-        $paymentDetails['cash_collection_required'] = true;
-        $paymentDetails['cash_collection_details'] = [
-            'amount' => $cashAmount,
-            'note' => 'Driver must collect this amount in cash from user',
-            'message_ar' => "يجب على السائق تحصيل {$cashAmount} JD نقداً من المستخدم",
-            'message_en' => "Driver must collect JD {$cashAmount} cash from user"
-        ];
-
-        // Deduct admin commission from cash portion as well
-        $cashAdminCommission = ($cashAmount * $commissionData['commission_value']) / 
-            ($commissionData['commission_type'] == 1 ? $totalPriceBeforeDiscount : 100);
+        // حساب كم سنخصم من كل مصدر
+        $amountFromAppCredit = min($availableAppCredit, $finalPrice);
+        $amountFromWallet = min($realWalletBalance, $finalPrice - $amountFromAppCredit);
+        $totalPaid = $amountFromAppCredit + $amountFromWallet;
         
-        if ($cashAdminCommission > 0) {
+        // تحديد نوع الدفع
+        $isFullyPaid = ($totalPaid >= $finalPrice);
+        $isHybridPayment = !$isFullyPaid;
+        $cashAmount = $isHybridPayment ? ($finalPrice - $totalPaid) : 0;
+        
+        // Update order
+        $order->is_hybrid_payment = $isHybridPayment;
+        $order->wallet_amount_used = $amountFromWallet;
+        $order->app_credit_amount_used = $amountFromAppCredit;
+        $order->cash_amount_due = $cashAmount;
+        $order->save();
+        
+        // إعداد تفاصيل الدفع
+        $paymentDetails['payment_type'] = $isHybridPayment ? 'hybrid_multi_source' : 'full_wallet_and_credit';
+        $paymentDetails['app_credit_system_active'] = $appCreditEnabled;
+        $paymentDetails['payment_sources'] = [
+            'app_credit' => $amountFromAppCredit,
+            'real_wallet' => $amountFromWallet,
+            'cash_required' => $cashAmount
+        ];
+        
+        if ($appCreditEnabled && $amountFromAppCredit > 0) {
+            $paymentDetails['app_credit_details'] = [
+                'amount_per_order' => $user->app_credit_amount_per_order,
+                'orders_remaining_before' => $user->app_credit_orders_remaining,
+            ];
+        }
+
+        Log::info("Order {$order->id}: Multi-source payment - App Credit: {$amountFromAppCredit}, Wallet: {$amountFromWallet}, Cash: {$cashAmount}");
+
+        // ========== الخطوة 2: خصم رصيد التطبيق (إذا وجد) ==========
+        if ($amountFromAppCredit > 0) {
+            $ordersRemainingBefore = $user->app_credit_orders_remaining;
+            
+            DB::table('app_credit_transactions')->insert([
+                'order_id' => $order->id,
+                'user_id' => $user->id,
+                'amount' => $amountFromAppCredit,
+                'type_of_transaction' => 2, // withdrawal
+                'note' => "الدفع للطلب رقم {$order->id} من رصيد التطبيق",
+                'orders_remaining_before' => $ordersRemainingBefore,
+                'orders_remaining_after' => max(0, $ordersRemainingBefore - 1),
+                'amount_per_order' => $user->app_credit_amount_per_order,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            DB::table('users')
+                ->where('id', $user->id)
+                ->decrement('app_credit', $amountFromAppCredit);
+
+            // تقليل عداد الرحلات
+            $user->fresh()->decrementAppCreditOrdersRemaining();
+            
+            $paymentDetails['transactions_created'][] = [
+                'type' => 'app_credit_deduction',
+                'amount' => $amountFromAppCredit,
+                'description' => 'Payment from app credit with distribution system'
+            ];
+            
+            if ($appCreditEnabled) {
+                $paymentDetails['app_credit_details']['orders_remaining_after'] = $user->fresh()->app_credit_orders_remaining;
+            }
+        }
+
+        // ========== الخطوة 3: خصم المحفظة الحقيقية (إذا احتجنا) ==========
+        if ($amountFromWallet > 0) {
+            $noteText = "الدفع للطلب رقم {$order->id} من المحفظة";
+            
+            if ($amountFromAppCredit > 0) {
+                $noteText = "الدفع الجزئي للطلب رقم {$order->id} من المحفظة (بعد استخدام رصيد التطبيق)";
+            }
+            
+            DB::table('wallet_transactions')->insert([
+                'order_id' => $order->id,
+                'user_id' => $user->id,
+                'amount' => $amountFromWallet,
+                'type_of_transaction' => 2, // withdrawal
+                'note' => $noteText,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            DB::table('users')
+                ->where('id', $user->id)
+                ->decrement('balance', $amountFromWallet);
+
+            $paymentDetails['transactions_created'][] = [
+                'type' => 'real_wallet_deduction',
+                'amount' => $amountFromWallet,
+                'description' => 'Payment from real wallet balance'
+            ];
+        }
+
+        // ========== الخطوة 4: تحويل المبلغ المدفوع للسائق ==========
+        $totalPaidToTransfer = $amountFromAppCredit + $amountFromWallet;
+        
+        if ($totalPaidToTransfer > 0) {
             DB::table('wallet_transactions')->insert([
                 'order_id' => $order->id,
                 'driver_id' => $driver->id,
-                'amount' => $cashAdminCommission,
-                'type_of_transaction' => 2, // withdrawal
-                'note' => "خصم عمولة الإدارة من الجزء النقدي للطلب رقم {$order->id}",
+                'amount' => $totalPaidToTransfer,
+                'type_of_transaction' => 1, // addition
+                'note' => "تحويل المبلغ من المستخدم للطلب رقم {$order->id}",
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
 
             DB::table('drivers')
                 ->where('id', $driver->id)
-                ->decrement('balance', $cashAdminCommission);
+                ->increment('balance', $totalPaidToTransfer);
 
             $paymentDetails['transactions_created'][] = [
-                'type' => 'cash_portion_commission',
-                'amount' => $cashAdminCommission,
-                'description' => 'Admin commission from cash portion deducted from driver wallet'
+                'type' => 'transfer_to_driver',
+                'amount' => $totalPaidToTransfer,
+                'description' => 'Total amount transferred to driver'
             ];
         }
+
+        // ========== الخطوة 5: خصم عمولة الإدارة ==========
+        $totalPriceBeforeDiscount = $order->total_price_before_discount;
+        $commissionData = $this->getServiceCommission($order->service_id, $totalPriceBeforeDiscount);
+        $adminCommission = $commissionData['admin_commission'];
+
+        DB::table('wallet_transactions')->insert([
+            'order_id' => $order->id,
+            'driver_id' => $driver->id,
+            'amount' => $adminCommission,
+            'type_of_transaction' => 2, // withdrawal
+            'note' => "خصم عمولة الإدارة للطلب رقم {$order->id}",
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        DB::table('drivers')
+            ->where('id', $driver->id)
+            ->decrement('balance', $adminCommission);
+
+        $paymentDetails['transactions_created'][] = [
+            'type' => 'admin_commission_deduction',
+            'amount' => $adminCommission,
+            'description' => 'Admin commission deducted from driver wallet'
+        ];
+
+        // ========== الخطوة 6: تعويض الخصم (الكوبون) للسائق ==========
+        if ($discountValue > 0) {
+            DB::table('wallet_transactions')->insert([
+                'order_id' => $order->id,
+                'driver_id' => $driver->id,
+                'amount' => $discountValue,
+                'type_of_transaction' => 1, // addition
+                'note' => "تعويض الكوبون للطلب رقم {$order->id}",
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            DB::table('drivers')
+                ->where('id', $driver->id)
+                ->increment('balance', $discountValue);
+
+            $paymentDetails['transactions_created'][] = [
+                'type' => 'discount_compensation',
+                'amount' => $discountValue,
+                'description' => 'Coupon discount compensation added to driver wallet'
+            ];
+        }
+
+        // ========== الخطوة 7: معالجة الجزء النقدي (إذا كان دفع هجين) ==========
+        if ($isHybridPayment && $cashAmount > 0) {
+            $paymentDetails['cash_collection_required'] = true;
+            $paymentDetails['cash_collection_details'] = [
+                'amount' => $cashAmount,
+                'note' => 'Driver must collect this amount in cash from user',
+                'message_ar' => "يجب على السائق تحصيل {$cashAmount} JD نقداً من المستخدم",
+                'message_en' => "Driver must collect JD {$cashAmount} cash from user"
+            ];
+
+            // خصم عمولة الجزء النقدي
+            $cashCommissionPercentage = $commissionData['commission_type'] == 2 ? $commissionData['commission_value'] : 0;
+            
+            if ($cashCommissionPercentage > 0) {
+                $cashAdminCommission = ($cashAmount * $cashCommissionPercentage) / 100;
+                
+                if ($cashAdminCommission > 0) {
+                    DB::table('wallet_transactions')->insert([
+                        'order_id' => $order->id,
+                        'driver_id' => $driver->id,
+                        'amount' => $cashAdminCommission,
+                        'type_of_transaction' => 2, // withdrawal
+                        'note' => "خصم عمولة الإدارة من الجزء النقدي للطلب رقم {$order->id}",
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+
+                    DB::table('drivers')
+                        ->where('id', $driver->id)
+                        ->decrement('balance', $cashAdminCommission);
+
+                    $paymentDetails['transactions_created'][] = [
+                        'type' => 'cash_portion_commission',
+                        'amount' => $cashAdminCommission,
+                        'description' => 'Admin commission from cash portion deducted from driver wallet'
+                    ];
+                }
+            }
+        }
+
+        // ========== إضافة الأرصدة النهائية ==========
+        $paymentDetails['user_final_balances'] = [
+            'app_credit' => $user->fresh()->app_credit,
+            'real_wallet' => $user->fresh()->balance,
+            'app_credit_orders_remaining' => $user->fresh()->app_credit_orders_remaining
+        ];
+        $paymentDetails['driver_final_balance'] = $driver->fresh()->balance;
+
+        Log::info("Multi-source wallet payment processed for order {$order->id}", [
+            'app_credit_used' => $amountFromAppCredit,
+            'wallet_used' => $amountFromWallet,
+            'cash_required' => $cashAmount,
+            'orders_remaining' => $user->fresh()->app_credit_orders_remaining
+        ]);
     }
 
-    $paymentDetails['user_remaining_balance'] = $user->fresh()->balance;
-    $paymentDetails['driver_final_balance'] = $driver->fresh()->balance;
-
-    Log::info("Wallet payment processed for order {$order->id}", [
-        'is_hybrid' => $isHybridPayment,
-        'wallet_amount' => $walletAmount,
-        'cash_amount' => $cashAmount,
-        'admin_commission' => $adminCommission,
-        'discount_compensation' => $discountValue
-    ]);
-}
     /**
      * Get service commission details (PUBLIC method for external use)
      */
