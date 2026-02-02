@@ -638,137 +638,135 @@ class OrderController extends Controller
      * @param int $id
      * @return \Illuminate\Http\Response
      */
-   erordercontroller show · PHP
-Copy
 
-public function show(Request $request, $id)
-{
-    $user = Auth::user();
+    public function show(Request $request, $id)
+    {
+        $user = Auth::user();
 
-    // Detect language from request header (default: ar)
-    $lang = strtolower($request->header('lang', 'ar'));
-    if (!in_array($lang, ['ar', 'en'])) {
-        $lang = 'ar';
+        // Detect language from request header (default: ar)
+        $lang = strtolower($request->header('lang', 'ar'));
+        if (!in_array($lang, ['ar', 'en'])) {
+            $lang = 'ar';
+        }
+
+        $order = Order::where('id', $id)
+            ->where('user_id', $user->id)
+            ->with([
+                'driver',
+                'driver.ratings',
+                'service',
+                'coupon'
+            ])
+            ->first();
+
+        if (!$order) {
+            return $this->error_response('Order not found', null);
+        }
+
+        // Add helper attributes
+        $order->status_text          = $order->getStatusText();
+        $order->payment_method_text  = $order->getPaymentMethodText();
+        $order->payment_status_text  = $order->getPaymentStatusText();
+        $order->distance             = $order->getDistance();
+        $order->discount_percentage  = $order->getDiscountPercentage();
+        $order->tracking_url         = $order->getTrackingUrl();
+
+        $hasRated = \App\Models\Rating::where('user_id', $user->id)
+            ->where('order_id', $order->id)
+            ->where('driver_id', $order->driver_id)
+            ->exists();
+
+        $order->is_review = $hasRated ? 1 : 2;
+
+        if (empty($order->estimated_time) && !is_null($order->drop_lat) && !is_null($order->drop_lng)) {
+            $order->estimated_time = $this->calculateEstimatedTime(
+                $order->pick_lat,
+                $order->pick_lng,
+                $order->drop_lat,
+                $order->drop_lng
+            );
+        }
+
+        // ========== PAYMENT BREAKDOWN ==========
+        $totalAmount    = $order->total_price_after_discount;
+        $paymentBreakdown = [];
+
+        switch ($order->payment_method) {
+
+            // ─── CASH ────────────────────────────────────────────────
+            case PaymentMethod::Cash:
+                $paymentBreakdown = [
+                    'payment_type'            => 'cash',
+                    'total_amount'            => $totalAmount,
+                    'amount_from_wallet'      => 0,
+                    'amount_from_app_credit'  => 0,
+                    'amount_cash_to_collect'  => $totalAmount,
+                    'message' => $lang === 'ar'
+                        ? "المبلغ الكامل {$totalAmount} JD سيتم دفعه نقداً"
+                        : "The full amount of JD {$totalAmount} will be paid in cash",
+                ];
+                break;
+
+            // ─── WALLET ──────────────────────────────────────────────
+            case PaymentMethod::Wallet:
+                $userBalance  = (float) $user->balance;
+                $walletAmount = min($userBalance, $totalAmount);
+                $cashAmount   = round($totalAmount - $walletAmount, 2);
+
+                if ($cashAmount > 0) {
+                    $message = $lang === 'ar'
+                        ? "سيتم خصم {$walletAmount} JD من محفظتك والمبلغ المتبقي {$cashAmount} JD سيتم دفعه نقداً"
+                        : "JD {$walletAmount} will be deducted from your wallet and the remaining JD {$cashAmount} will be paid in cash";
+                } else {
+                    $message = $lang === 'ar'
+                        ? "سيتم خصم المبلغ الكامل {$walletAmount} JD من محفظتك"
+                        : "The full amount of JD {$walletAmount} will be deducted from your wallet";
+                }
+
+                $paymentBreakdown = [
+                    'payment_type'            => $cashAmount > 0 ? 'hybrid_wallet_cash' : 'full_wallet',
+                    'total_amount'            => $totalAmount,
+                    'amount_from_wallet'      => $walletAmount,
+                    'amount_from_app_credit'  => 0,
+                    'amount_cash_to_collect'  => $cashAmount,
+                    'message'                 => $message,
+                ];
+                break;
+
+            // ─── APP CREDIT ──────────────────────────────────────────
+            case PaymentMethod::AppCredit:
+                $distribution   = \App\Models\WalletDistribution::where('activate', 1)->first();
+                $creditPerOrder = $distribution ? (float) $distribution->amount_per_order : 0;
+
+                $creditUsed = min($creditPerOrder, $totalAmount);
+                $cashAmount = round($totalAmount - $creditUsed, 2);
+
+                if ($cashAmount > 0) {
+                    $message = $lang === 'ar'
+                        ? "سيتم خصم {$creditUsed} JD من رصيد التطبيق والمبلغ المتبقي {$cashAmount} JD سيتم دفعه نقداً"
+                        : "JD {$creditUsed} will be deducted from your app credit and the remaining JD {$cashAmount} will be paid in cash";
+                } else {
+                    $message = $lang === 'ar'
+                        ? "سيتم خصم المبلغ الكامل {$creditUsed} JD من رصيد التطبيق"
+                        : "The full amount of JD {$creditUsed} will be deducted from your app credit";
+                }
+
+                $paymentBreakdown = [
+                    'payment_type'            => $cashAmount > 0 ? 'hybrid_app_credit_cash' : 'full_app_credit',
+                    'total_amount'            => $totalAmount,
+                    'amount_from_wallet'      => 0,
+                    'amount_from_app_credit'  => $creditUsed,
+                    'amount_cash_to_collect'  => $cashAmount,
+                    'message'                 => $message,
+                ];
+                break;
+        }
+
+        $responseData = $order->toArray();
+        $responseData['payment_breakdown'] = $paymentBreakdown;
+
+        return $this->success_response('Order details retrieved successfully', $responseData);
     }
-
-    $order = Order::where('id', $id)
-        ->where('user_id', $user->id)
-        ->with([
-            'driver',
-            'driver.ratings',
-            'service',
-            'coupon'
-        ])
-        ->first();
-
-    if (!$order) {
-        return $this->error_response('Order not found', null);
-    }
-
-    // Add helper attributes
-    $order->status_text          = $order->getStatusText();
-    $order->payment_method_text  = $order->getPaymentMethodText();
-    $order->payment_status_text  = $order->getPaymentStatusText();
-    $order->distance             = $order->getDistance();
-    $order->discount_percentage  = $order->getDiscountPercentage();
-    $order->tracking_url         = $order->getTrackingUrl();
-
-    $hasRated = \App\Models\Rating::where('user_id', $user->id)
-        ->where('order_id', $order->id)
-        ->where('driver_id', $order->driver_id)
-        ->exists();
-
-    $order->is_review = $hasRated ? 1 : 2;
-
-    if (empty($order->estimated_time) && !is_null($order->drop_lat) && !is_null($order->drop_lng)) {
-        $order->estimated_time = $this->calculateEstimatedTime(
-            $order->pick_lat,
-            $order->pick_lng,
-            $order->drop_lat,
-            $order->drop_lng
-        );
-    }
-
-    // ========== PAYMENT BREAKDOWN ==========
-    $totalAmount    = $order->total_price_after_discount;
-    $paymentBreakdown = [];
-
-    switch ($order->payment_method) {
-
-        // ─── CASH ────────────────────────────────────────────────
-        case PaymentMethod::Cash:
-            $paymentBreakdown = [
-                'payment_type'            => 'cash',
-                'total_amount'            => $totalAmount,
-                'amount_from_wallet'      => 0,
-                'amount_from_app_credit'  => 0,
-                'amount_cash_to_collect'  => $totalAmount,
-                'message' => $lang === 'ar'
-                    ? "المبلغ الكامل {$totalAmount} JD سيتم دفعه نقداً"
-                    : "The full amount of JD {$totalAmount} will be paid in cash",
-            ];
-            break;
-
-        // ─── WALLET ──────────────────────────────────────────────
-        case PaymentMethod::Wallet:
-            $userBalance  = (float) $user->balance;
-            $walletAmount = min($userBalance, $totalAmount);
-            $cashAmount   = round($totalAmount - $walletAmount, 2);
-
-            if ($cashAmount > 0) {
-                $message = $lang === 'ar'
-                    ? "سيتم خصم {$walletAmount} JD من محفظتك والمبلغ المتبقي {$cashAmount} JD سيتم دفعه نقداً"
-                    : "JD {$walletAmount} will be deducted from your wallet and the remaining JD {$cashAmount} will be paid in cash";
-            } else {
-                $message = $lang === 'ar'
-                    ? "سيتم خصم المبلغ الكامل {$walletAmount} JD من محفظتك"
-                    : "The full amount of JD {$walletAmount} will be deducted from your wallet";
-            }
-
-            $paymentBreakdown = [
-                'payment_type'            => $cashAmount > 0 ? 'hybrid_wallet_cash' : 'full_wallet',
-                'total_amount'            => $totalAmount,
-                'amount_from_wallet'      => $walletAmount,
-                'amount_from_app_credit'  => 0,
-                'amount_cash_to_collect'  => $cashAmount,
-                'message'                 => $message,
-            ];
-            break;
-
-        // ─── APP CREDIT ──────────────────────────────────────────
-        case PaymentMethod::AppCredit:
-            $distribution   = \App\Models\WalletDistribution::where('activate', 1)->first();
-            $creditPerOrder = $distribution ? (float) $distribution->amount_per_order : 0;
-
-            $creditUsed = min($creditPerOrder, $totalAmount);
-            $cashAmount = round($totalAmount - $creditUsed, 2);
-
-            if ($cashAmount > 0) {
-                $message = $lang === 'ar'
-                    ? "سيتم خصم {$creditUsed} JD من رصيد التطبيق والمبلغ المتبقي {$cashAmount} JD سيتم دفعه نقداً"
-                    : "JD {$creditUsed} will be deducted from your app credit and the remaining JD {$cashAmount} will be paid in cash";
-            } else {
-                $message = $lang === 'ar'
-                    ? "سيتم خصم المبلغ الكامل {$creditUsed} JD من رصيد التطبيق"
-                    : "The full amount of JD {$creditUsed} will be deducted from your app credit";
-            }
-
-            $paymentBreakdown = [
-                'payment_type'            => $cashAmount > 0 ? 'hybrid_app_credit_cash' : 'full_app_credit',
-                'total_amount'            => $totalAmount,
-                'amount_from_wallet'      => 0,
-                'amount_from_app_credit'  => $creditUsed,
-                'amount_cash_to_collect'  => $cashAmount,
-                'message'                 => $message,
-            ];
-            break;
-    }
-
-    $responseData = $order->toArray();
-    $responseData['payment_breakdown'] = $paymentBreakdown;
-
-    return $this->success_response('Order details retrieved successfully', $responseData);
-}
 
     public function cancelOrder(Request $request, $id)
     {
