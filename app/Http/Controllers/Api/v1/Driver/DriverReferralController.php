@@ -22,64 +22,36 @@ class DriverReferralController extends Controller
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getReferralInfo(Request $request)
+   public function getReferralInfo(Request $request)
     {
         try {
             $driver = Auth::guard('driver-api')->user();
             
             // Pagination parameters
             $perPage = $request->get('per_page', 15);
-            $type = $request->get('type', 'all'); // all, users, drivers
             $page = $request->get('page', 1);
             
-            // Get referred users
-            $referredUsers = [];
-            $referredDrivers = [];
+            // Get all users referred by this driver (stored in users.driver_id)
+            $referredUsers = User::where('driver_id', $driver->id)
+                ->select('id', 'name', 'phone', 'photo', 'created_at')
+                ->get()
+                ->map(function ($refUser) {
+                    return [
+                        'id' => $refUser->id,
+                        'name' => $refUser->name,
+                        'phone' => $refUser->phone,
+                        'photo_url' => $refUser->photo_url,
+                        'type' => 'user',
+                        'joined_date' => $refUser->created_at->format('Y-m-d H:i:s'),
+                        'formatted_date' => $refUser->created_at->diffForHumans(),
+                    ];
+                });
             
-            if ($type === 'all' || $type === 'users') {
-                $referredUsers = User::where('driver_id', $driver->id)
-                    ->select('id', 'name', 'phone', 'photo', 'created_at')
-                    ->get()
-                    ->map(function ($refUser) {
-                        return [
-                            'id' => $refUser->id,
-                            'name' => $refUser->name,
-                            'phone' => $refUser->phone,
-                            'photo_url' => $refUser->photo_url,
-                            'type' => 'user',
-                            'joined_date' => $refUser->created_at->format('Y-m-d H:i:s'),
-                            'formatted_date' => $refUser->created_at->diffForHumans(),
-                        ];
-                    });
-            }
-            
-            if ($type === 'all' || $type === 'drivers') {
-                $referredDrivers = Driver::where('driver_id', $driver->id)
-                    ->select('id', 'name', 'phone', 'photo', 'created_at')
-                    ->get()
-                    ->map(function ($refDriver) {
-                        return [
-                            'id' => $refDriver->id,
-                            'name' => $refDriver->name,
-                            'phone' => $refDriver->phone,
-                            'photo_url' => $refDriver->photo_url,
-                            'type' => 'driver',
-                            'joined_date' => $refDriver->created_at->format('Y-m-d H:i:s'),
-                            'formatted_date' => $refDriver->created_at->diffForHumans(),
-                        ];
-                    });
-            }
-            
-            // Merge and sort by date
-            $allReferrals = collect($referredUsers)
-                ->merge($referredDrivers)
-                ->sortByDesc('joined_date')
-                ->values();
+            // Sort by date
+            $allReferrals = $referredUsers->sortByDesc('joined_date')->values();
             
             // Calculate counts
-            $referredUsersCount = User::where('driver_id', $driver->id)->count();
-            $referredDriversCount = Driver::where('driver_id', $driver->id)->count();
-            $totalReferrals = $referredUsersCount + $referredDriversCount;
+            $totalReferrals = User::where('driver_id', $driver->id)->count();
             
             // Paginate
             $total = $allReferrals->count();
@@ -90,8 +62,6 @@ class DriverReferralController extends Controller
                 'data' => [
                     'referral_code' => $driver->referral_code,
                     'total_referrals' => $totalReferrals,
-                    'referred_users_count' => $referredUsersCount,
-                    'referred_drivers_count' => $referredDriversCount,
                     'referred_list' => $items,
                     'pagination' => [
                         'total' => $total,

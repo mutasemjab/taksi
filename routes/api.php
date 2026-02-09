@@ -60,11 +60,7 @@ Route::group(['prefix' => 'v1/user'], function () {
     // Auth Route
     Route::group(['middleware' => ['auth:user-api']], function () {
 
-        Route::get('/referral/info', [UserReferralController::class, 'getReferralInfo']);
-    
-        // Get referral challenge completion history
-        Route::get('/referral/challenge-history', [UserReferralController::class, 'getReferralChallengeHistory']);
-        
+        Route::get('/referral/info', [UserReferralController::class, 'getReferralInfo']);        
 
         Route::get('/home', [HomeController::class, 'index']);
         Route::post('/addBalance', [WalletController::class, 'addBalance']);

@@ -96,6 +96,10 @@ class ReferralService
     /**
      * Process referral when a new driver registers
      * 
+     * Note: Since drivers table doesn't have user_id/driver_id columns,
+     * we can only track if a USER referred this driver.
+     * Driver-to-driver referrals are not currently supported in the database structure.
+     * 
      * @param Driver $newDriver The newly registered driver
      * @param string|null $referralCode The referral code used during registration
      * @return array Result of the referral process
@@ -116,14 +120,15 @@ class ReferralService
             $referrer = User::where('referral_code', $referralCode)->first();
             
             if ($referrer) {
-                // Link the new driver to the user referrer
-                $newDriver->user_id = $referrer->id;
-                $newDriver->save();
+                // Since drivers table doesn't have user_id column,
+                // we cannot directly link the driver to the user who referred them.
+                // You would need to add a user_id column to drivers table, or
+                // create a separate driver_referrals table to track this.
                 
-                // Update referral challenge progress (rewards handled by Challenge system)
+                // Update referral challenge progress for the user
                 $referrer->updateChallengeProgress('referral', 1);
                 
-                \Log::info("Driver {$newDriver->id} registered with referral code from user {$referrer->id}. Challenge progress updated.");
+                \Log::info("Driver {$newDriver->id} registered with referral code from user {$referrer->id}. Challenge progress updated. Note: Driver table does not store referrer relationship.");
                 
                 DB::commit();
                 
@@ -132,7 +137,8 @@ class ReferralService
                     'message' => 'Referral processed successfully',
                     'referrer_type' => 'user',
                     'referrer_id' => $referrer->id,
-                    'referrer_name' => $referrer->name
+                    'referrer_name' => $referrer->name,
+                    'note' => 'Driver referral counted for challenge, but not stored in driver record (add user_id column to drivers table to store this)'
                 ];
             }
             
@@ -140,20 +146,19 @@ class ReferralService
             $referrer = Driver::where('referral_code', $referralCode)->first();
             
             if ($referrer) {
-                // Link the new driver to the driver referrer
-                $newDriver->driver_id = $referrer->id;
-                $newDriver->save();
+                // Driver-to-driver referrals cannot be tracked in current structure
+                // because drivers table doesn't have driver_id column
                 
-                \Log::info("Driver {$newDriver->id} registered with referral code from driver {$referrer->id}");
+                \Log::info("Driver {$newDriver->id} attempted registration with driver referral code {$referralCode}, but driver-to-driver referrals not supported in current DB structure");
                 
                 DB::commit();
                 
                 return [
-                    'success' => true,
-                    'message' => 'Referral processed successfully',
+                    'success' => false,
+                    'message' => 'Driver-to-driver referrals not currently supported',
                     'referrer_type' => 'driver',
                     'referrer_id' => $referrer->id,
-                    'referrer_name' => $referrer->name
+                    'note' => 'Add driver_id column to drivers table to support driver-to-driver referrals'
                 ];
             }
             
@@ -204,13 +209,21 @@ class ReferralService
      */
     public function getUserReferralStats(User $user)
     {
+        // Users referred by this user (stored in users.user_id)
         $referredUsersCount = User::where('user_id', $user->id)->count();
-        $referredDriversCount = Driver::where('user_id', $user->id)->count();
         
-        $totalEarnings = WalletTransaction::where('user_id', $user->id)
-            ->where('type_of_transaction', 1)
-            ->where('note', 'LIKE', '%referral%')
-            ->sum('amount');
+        // Drivers referred by this user (stored in users.driver_id points to the user who referred them)
+        // Actually, when a user refers a driver, the driver row doesn't have user_id
+        // The driver registration would need to be tracked differently
+        // For now, we can only track users referring other users
+        $referredDriversCount = 0; // Drivers table doesn't have user_id/driver_id columns
+        
+        $totalEarnings = DB::table('user_challenge_progress')
+            ->join('challenges', 'user_challenge_progress.challenge_id', '=', 'challenges.id')
+            ->where('user_challenge_progress.user_id', $user->id)
+            ->where('challenges.challenge_type', 'referral')
+            ->where('user_challenge_progress.is_completed', true)
+            ->sum(DB::raw('challenges.reward_amount * user_challenge_progress.times_completed'));
         
         return [
             'total_referrals' => $referredUsersCount + $referredDriversCount,
@@ -228,19 +241,17 @@ class ReferralService
      */
     public function getDriverReferralStats(Driver $driver)
     {
+        // Users referred by this driver (stored in users.driver_id)
         $referredUsersCount = User::where('driver_id', $driver->id)->count();
-        $referredDriversCount = Driver::where('driver_id', $driver->id)->count();
         
-        $totalEarnings = WalletTransaction::where('driver_id', $driver->id)
-            ->where('type_of_transaction', 1)
-            ->where('note', 'LIKE', '%referral%')
-            ->sum('amount');
+        // Drivers table doesn't have user_id/driver_id columns
+        $referredDriversCount = 0;
         
         return [
-            'total_referrals' => $referredUsersCount + $referredDriversCount,
+            'total_referrals' => $referredUsersCount,
             'referred_users' => $referredUsersCount,
-            'referred_drivers' => $referredDriversCount,
-            'total_earnings' => (float) $totalEarnings,
+            'referred_drivers' => 0,
+            'total_earnings' => 0, // Drivers don't have challenge system
         ];
     }
 }
