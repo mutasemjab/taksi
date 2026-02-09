@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\v1\User;
 
 use App\Http\Controllers\Api\v1\Driver\AlertDriverController;
 use App\Http\Controllers\Api\v1\Driver\ComplaintDriverController;
+use App\Http\Controllers\Api\v1\Driver\DriverReferralController;
 use App\Http\Controllers\Api\v1\Driver\OrderDriverController;
 use App\Http\Controllers\Api\v1\Driver\RatingDriverController;
 use App\Http\Controllers\Api\v1\Driver\ServiceDriverController;
@@ -58,6 +59,12 @@ Route::group(['prefix' => 'v1/user'], function () {
 
     // Auth Route
     Route::group(['middleware' => ['auth:user-api']], function () {
+
+        Route::get('/referral/info', [UserReferralController::class, 'getReferralInfo']);
+    
+        // Get referral challenge completion history
+        Route::get('/referral/challenge-history', [UserReferralController::class, 'getReferralChallengeHistory']);
+        
 
         Route::get('/home', [HomeController::class, 'index']);
         Route::post('/addBalance', [WalletController::class, 'addBalance']);
@@ -121,7 +128,7 @@ Route::group(['prefix' => 'v1/driver'], function () {
     Route::group(['middleware' => ['auth:driver-api', 'check.driver.activation']], function () {
 
         Route::post('/orders/{id}/reject', [OrderDriverController::class, 'rejectOrder']);
-
+ Route::get('/referral/info', [DriverReferralController::class, 'getReferralInfo']);
         Route::get('/hotSpots', [HotSpotsController::class, 'index']);
         Route::get('/getStatusOfDriver', [AuthController::class, 'getStatusOfDriver']);
         Route::get('/active', [AuthController::class, 'active']);
