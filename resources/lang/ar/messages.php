@@ -1980,7 +1980,7 @@ return [
     'Sort_By' => 'ترتيب حسب',
      // Referral System Translations
     'user_referral_user_reward' => 'مكافأة إحالة مستخدم لمستخدم (دينار)',
-    'driver_referral_user_reward' => 'مكافأة إحالة مستخدم لسائق (دينار)',
+    'driver_referral_user_reward' => 'مكافأة إحالة  سائق لمستخدم (دينار)',
     'number_of_referral_user_to_reward' => 'عدد الإحالات المطلوبة',
     'number_of_order_to_get_reward' => 'عدد الطلبات للحصول على المكافأة',
 
