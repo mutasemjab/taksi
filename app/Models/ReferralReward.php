@@ -24,12 +24,12 @@ class ReferralReward extends Model
         'reward_paid_at' => 'datetime',
     ];
 
-    /**
+     /**
      * Get the referrer (User or Driver)
      */
     public function referrer()
     {
-        return $this->morphTo();
+        return $this->morphTo(__FUNCTION__, 'referrer_type', 'referrer_id');
     }
 
     /**
@@ -37,6 +37,6 @@ class ReferralReward extends Model
      */
     public function referred()
     {
-        return $this->morphTo();
+        return $this->morphTo(__FUNCTION__, 'referred_type', 'referred_id');
     }
 }
