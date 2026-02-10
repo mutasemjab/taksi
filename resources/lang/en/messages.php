@@ -1943,7 +1943,24 @@ return [
 'Never_Logged_In' => 'Never Logged In',
 'Registration_Date' => 'Registration Date',
 'Sort_By' => 'Sort By',
-    '' => '',
+ // Referral System Translations
+    'user_referral_user_reward' => 'User Referral User Reward (JD)',
+    'driver_referral_user_reward' => 'Driver Referral User Reward (JD)',
+    'number_of_referral_user_to_reward' => 'Number of Referrals Required',
+    'number_of_order_to_get_reward' => 'Number of Orders to Get Reward',
+
+    // Descriptions (optional, for tooltips or help text)
+    'user_referral_user_reward_desc' => 'Amount paid when a user refers another user',
+    'driver_referral_user_reward_desc' => 'Amount paid when a user refers a driver',
+    'number_of_referral_user_to_reward_desc' => 'How many users need to be referred (reserved for future)',
+    'number_of_order_to_get_reward_desc' => 'How many orders the referred person must complete before referrer gets reward',
+
+    // Additional translations
+    'Referral_Settings' => 'Referral Settings',
+    'Referral_System' => 'Referral System',
+    'Reward_Amount' => 'Reward Amount',
+    'Orders_Required' => 'Orders Required',
+    'enable_app_credit_distribution_system' => 'Enable app credit distribution system',
     '' => '',
     '' => '',
     '' => '',

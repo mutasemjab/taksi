@@ -1978,5 +1978,24 @@ return [
     'Never_Logged_In' => 'لم يسجل دخول مطلقاً',
     'Registration_Date' => 'تاريخ التسجيل',
     'Sort_By' => 'ترتيب حسب',
+     // Referral System Translations
+    'user_referral_user_reward' => 'مكافأة إحالة مستخدم لمستخدم (دينار)',
+    'driver_referral_user_reward' => 'مكافأة إحالة مستخدم لسائق (دينار)',
+    'number_of_referral_user_to_reward' => 'عدد الإحالات المطلوبة',
+    'number_of_order_to_get_reward' => 'عدد الطلبات للحصول على المكافأة',
+
+    // Descriptions (optional, for tooltips or help text)
+    'user_referral_user_reward_desc' => 'المبلغ المدفوع عندما يقوم مستخدم بإحالة مستخدم آخر',
+    'driver_referral_user_reward_desc' => 'المبلغ المدفوع عندما يقوم مستخدم بإحالة سائق',
+    'number_of_referral_user_to_reward_desc' => 'كم عدد المستخدمين المطلوب إحالتهم (محجوز للمستقبل)',
+    'number_of_order_to_get_reward_desc' => 'كم عدد الطلبات التي يجب أن يكملها الشخص المُحال قبل حصول المُحيل على المكافأة',
+
+    // Additional translations
+    'Referral_Settings' => 'إعدادات الإحالة',
+    'Referral_System' => 'نظام الإحالة',
+    'Reward_Amount' => 'مبلغ المكافأة',
+    'Orders_Required' => 'الطلبات المطلوبة',
+        'enable_app_credit_distribution_system' => 'تشغيل نظام توزيع رصيد التطبيق',
+
 
 ];
