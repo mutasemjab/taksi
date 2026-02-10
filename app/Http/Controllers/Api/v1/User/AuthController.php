@@ -197,7 +197,7 @@ class AuthController extends Controller
         ]);
     }
 
-   public function register(Request $request)
+    public function register(Request $request)
     {
         $userType = $request->user_type ?? 'user';
 
@@ -327,33 +327,6 @@ class AuthController extends Controller
                 $userData['referral_code'] = $this->generateReferralCode();
                 $userData['balance'] = $welcomeBonus;
 
-                // ========== HANDLE REFERRAL CODE INPUT ==========
-                if ($request->has('referral_code') && !empty($request->referral_code)) {
-                    $referralCode = $request->referral_code;
-
-                    // Check if referral code belongs to a user
-                    $referrer = \App\Models\User::where('referral_code', $referralCode)->first();
-
-                    if ($referrer) {
-                        // Link the new user to the referring user
-                        $userData['user_id'] = $referrer->id;
-                        Log::info("New user will be linked to user {$referrer->id} via referral code {$referralCode}");
-                    } else {
-                        // Check if referral code belongs to a driver
-                        $referrerDriver = \App\Models\Driver::where('referral_code', $referralCode)->first();
-
-                        if ($referrerDriver) {
-                            // Link the new user to the referring driver
-                            $userData['driver_id'] = $referrerDriver->id;
-                            Log::info("New user will be linked to driver {$referrerDriver->id} via referral code {$referralCode}");
-                        } else {
-                            // Invalid referral code - log but don't fail registration
-                            Log::warning("Invalid referral code provided during registration: {$referralCode}");
-                        }
-                    }
-                }
-                // ========== END HANDLE REFERRAL CODE INPUT ==========
-
                 $user = \App\Models\User::create($userData);
 
                 if ($welcomeBonus > 0) {
@@ -370,17 +343,22 @@ class AuthController extends Controller
 
                 \App\Models\WalletDistribution::applyToUser($user);
 
-                // ========== UPDATE REFERRER'S CHALLENGE PROGRESS ==========
-                if (isset($userData['user_id'])) {
-                    // Referrer is a user
-                    $referrer = \App\Models\User::find($userData['user_id']);
-                    if ($referrer) {
-                        $referrer->updateChallengeProgress('referral', 1);
-                        Log::info("Updated challenge progress for user {$referrer->id}");
+                // ========== PROCESS REFERRAL CODE ==========
+                if ($request->has('referral_code') && !empty($request->referral_code)) {
+                    try {
+                        $referralService = app(\App\Services\ReferralService::class);
+                        $referralResult = $referralService->processUserReferral($user, $request->referral_code);
+
+                        if ($referralResult['success']) {
+                            Log::info("Referral processed successfully for user {$user->id}", $referralResult);
+                        } else {
+                            Log::warning("Referral processing failed for user {$user->id}: {$referralResult['message']}");
+                        }
+                    } catch (\Exception $e) {
+                        Log::error("Error processing referral for user {$user->id}: " . $e->getMessage());
                     }
                 }
-                // Note: If you want to track driver referrals too, you can add challenge system for drivers
-                // ========== END UPDATE CHALLENGE PROGRESS ==========
+                // ========== END PROCESS REFERRAL CODE ==========
             }
 
             DB::commit();
@@ -728,10 +706,8 @@ class AuthController extends Controller
             // Check uniqueness in both users and drivers tables
             $existsInUsers = \App\Models\User::where('referral_code', $referralCode)->exists();
             $existsInDrivers = \App\Models\Driver::where('referral_code', $referralCode)->exists();
-
         } while ($existsInUsers || $existsInDrivers);
 
         return $referralCode;
     }
-
 }
