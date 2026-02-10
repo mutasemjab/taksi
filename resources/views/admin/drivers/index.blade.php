@@ -129,6 +129,7 @@
                                 <th>{{ __('messages.Balance') }}</th>
                                 <th>{{ __('messages.Last_Login') }}</th>
                                 <th>{{ __('messages.Status') }}</th>
+                                <th>{{ __('messages.activate_status') }}</th>
                                 <th>{{ __('messages.Actions') }}</th>
                             </tr>
                         </thead>
@@ -165,11 +166,23 @@
                                     <td>{{ $driver->balance }}</td>
                                     <td>
                                         @if ($driver->last_login)
-                                            @php
-                                                $isOnline = $driver->last_login >= now()->subMinutes(5);
+                                            <span class="text-muted">
+                                                {{ $driver->last_login->diffForHumans() }}
+                                            </span>
+                                            <br>
+                                            <span class="text-muted">
+                                                {{ $driver->last_login->format('Y-m-d H:i') }}
+                                            </span>
+                                        @else
+                                            <span class="badge badge-warning">{{ __('messages.Never_Logged_In') }}</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                         @php
+                                                $isOnline = $driver->status;
                                             @endphp
-                                            <div>
-                                                @if ($isOnline)
+                                        <div>
+                                                @if ($isOnline == 1)
                                                     <span class="badge badge-success">
                                                         <i class="fas fa-circle"></i> {{ __('messages.Online') }}
                                                     </span>
@@ -178,17 +191,7 @@
                                                         <i class="fas fa-circle"></i> {{ __('messages.Offline') }}
                                                     </span>
                                                 @endif
-                                            </div>
-                                            <small class="text-muted">
-                                                {{ $driver->last_login->diffForHumans() }}
-                                            </small>
-                                            <br>
-                                            <small class="text-muted">
-                                                {{ $driver->last_login->format('Y-m-d H:i') }}
-                                            </small>
-                                        @else
-                                            <span class="badge badge-warning">{{ __('messages.Never_Logged_In') }}</span>
-                                        @endif
+                                        </div>
                                     </td>
                                     <td>
                                         @if ($driver->activate == 1)

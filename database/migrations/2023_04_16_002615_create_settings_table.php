@@ -29,11 +29,14 @@ return new class extends Migration
             ['key' => "maximum_radius_to_find_drivers", 'value' => 20], // km
             ['key' => "can_driver_withdrawal", 'value' => 1], // 1 yes , 2 no
             [
-                'key' => 'enable_app_credit_distribution_system', 
+                'key' => 'enable_app_credit_distribution_system',
                 'value' => 1 // 1 yes , 0 no
             ],
+            ['key' => 'user_referral_user_reward', 'value' => 5], // Amount user gets when they refer another user
+            ['key' => 'driver_referral_user_reward', 'value' => 10], // Amount user gets when they refer a driver
+            ['key' => 'number_of_referral_user_to_reward', 'value' => 5], // How many users need to be referred before reward
+            ['key' => 'number_of_order_to_get_reward', 'value' => 1], // After how many orders the referrer gets the reward
         ]);
-
     }
 
     /**

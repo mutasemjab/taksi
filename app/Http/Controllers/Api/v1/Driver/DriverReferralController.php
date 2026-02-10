@@ -3,83 +3,73 @@
 namespace App\Http\Controllers\Api\v1\Driver;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
-use App\Models\Driver;
+use App\Services\ReferralService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 
 class DriverReferralController extends Controller
 {
+    protected $referralService;
+    
+    public function __construct(ReferralService $referralService)
+    {
+        $this->referralService = $referralService;
+    }
+    
     /**
-     * Get comprehensive referral information including stats and referred users list
-     * 
-     * Query Parameters:
-     * - per_page: Number of items per page (default: 15)
-     * - type: Filter type ('all', 'users', 'drivers') (default: 'all')
-     * - page: Page number (default: 1)
-     * 
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * Get comprehensive referral information
      */
-   public function getReferralInfo(Request $request)
+    public function getReferralInfo(Request $request)
     {
         try {
             $driver = Auth::guard('driver-api')->user();
             
-            // Pagination parameters
+            // Get stats
+            $stats = $this->referralService->getDriverReferralStats($driver);
+            
+            // Get detailed list
             $perPage = $request->get('per_page', 15);
-            $page = $request->get('page', 1);
+            $referralList = $this->referralService->getDriverReferralList($driver, $perPage);
             
-            // Get all users referred by this driver (stored in users.driver_id)
-            $referredUsers = User::where('driver_id', $driver->id)
-                ->select('id', 'name', 'phone', 'photo', 'created_at')
-                ->get()
-                ->map(function ($refUser) {
-                    return [
-                        'id' => $refUser->id,
-                        'name' => $refUser->name,
-                        'phone' => $refUser->phone,
-                        'photo_url' => $refUser->photo_url,
-                        'type' => 'user',
-                        'joined_date' => $refUser->created_at->format('Y-m-d H:i:s'),
-                        'formatted_date' => $refUser->created_at->diffForHumans(),
-                    ];
-                });
-            
-            // Sort by date
-            $allReferrals = $referredUsers->sortByDesc('joined_date')->values();
-            
-            // Calculate counts
-            $totalReferrals = User::where('driver_id', $driver->id)->count();
-            
-            // Paginate
-            $total = $allReferrals->count();
-            $items = $allReferrals->forPage($page, $perPage)->values();
+            // Format the list
+            $formattedList = $referralList->map(function ($referral) {
+                $referred = $referral->referred;
+                
+                return [
+                    'id' => $referral->id,
+                    'referred_name' => $referred->name ?? 'N/A',
+                    'referred_phone' => $referred->phone ?? 'N/A',
+                    'referred_type' => $referral->referred_type,
+                    'orders_completed' => $referral->orders_completed,
+                    'reward_paid' => $referral->reward_paid,
+                    'reward_amount' => $referral->reward_amount,
+                    'joined_date' => $referral->created_at->format('Y-m-d H:i:s'),
+                    'formatted_date' => $referral->created_at->diffForHumans(),
+                    'reward_paid_at' => $referral->reward_paid_at ? $referral->reward_paid_at->format('Y-m-d H:i:s') : null,
+                ];
+            });
             
             return response()->json([
-                'success' => true,
+                'status' => true,
                 'data' => [
                     'referral_code' => $driver->referral_code,
-                    'total_referrals' => $totalReferrals,
-                    'referred_list' => $items,
+                    'stats' => $stats,
+                    'referred_list' => $formattedList,
                     'pagination' => [
-                        'total' => $total,
-                        'per_page' => $perPage,
-                        'current_page' => $page,
-                        'last_page' => $total > 0 ? ceil($total / $perPage) : 1,
+                        'total' => $referralList->total(),
+                        'per_page' => $referralList->perPage(),
+                        'current_page' => $referralList->currentPage(),
+                        'last_page' => $referralList->lastPage(),
                     ]
                 ]
             ], 200);
             
         } catch (\Exception $e) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'message' => 'Error fetching referral information',
                 'error' => $e->getMessage()
             ], 500);
         }
     }
-    
-    
 }
