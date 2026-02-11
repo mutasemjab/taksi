@@ -32,6 +32,7 @@ class AppServiceProvider extends ServiceProvider
             'driver' => 'App\Models\Driver',
             'order' => 'App\Models\Order',
             'admin' => 'App\Models\Admin',
+            'setting' => 'App\Models\Setting',
 
         ]);
     
