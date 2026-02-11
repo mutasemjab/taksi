@@ -9,6 +9,7 @@ use App\Models\WalletTransaction;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
+
 class ReferralService
 {
     /**
@@ -118,29 +119,36 @@ class ReferralService
     
     /**
      * Process reward when referred user completes an order
-     * Call this after each USER order completion
+     * Pay reward for EACH completed order after reaching minimum threshold
      */
     public function processOrderCompletion($userId)
     {
         try {
-            // Find all referral records where this user was referred and reward not yet paid
+            // Find all referral records where this user was referred
             $referralRewards = ReferralReward::where('referred_id', $userId)
                 ->where('referred_type', 'user')
-                ->where('reward_paid', false)
                 ->get();
             
             $ordersNeededForReward = $this->getSetting('number_of_order_to_get_reward', 1);
+            $usersNeededForReward = $this->getSetting('number_of_referral_user_to_reward', 1);
             
             foreach ($referralRewards as $referralReward) {
                 // Increment order count for this specific referred user
                 $referralReward->increment('orders_completed');
                 
-                \Log::info("Referral reward {$referralReward->id}: Orders completed {$referralReward->orders_completed}/{$ordersNeededForReward}");
+                \Log::info("Referral reward {$referralReward->id}: Orders completed {$referralReward->orders_completed}");
                 
-                // Check if THIS user has reached the threshold
-                if ($referralReward->orders_completed >= $ordersNeededForReward) {
-                    // Now check if the REFERRER has enough qualified referrals
-                    $this->checkAndPayReferrer($referralReward);
+                // Check if referrer can receive rewards
+                $canReceiveRewards = $this->checkIfReferrerCanReceiveRewards(
+                    $referralReward->referrer_id,
+                    $referralReward->referrer_type,
+                    $ordersNeededForReward,
+                    $usersNeededForReward
+                );
+                
+                if ($canReceiveRewards) {
+                    // Pay reward for THIS completed order
+                    $this->payReferralRewardForOrder($referralReward);
                 }
             }
             
@@ -152,74 +160,52 @@ class ReferralService
     }
     
     /**
-     * Check if referrer has met all conditions and pay rewards
+     * Check if referrer has met the minimum requirements to start receiving rewards
      */
-    private function checkAndPayReferrer(ReferralReward $qualifiedReferral)
+    private function checkIfReferrerCanReceiveRewards($referrerId, $referrerType, $ordersNeededForReward, $usersNeededForReward)
     {
-        try {
-            $ordersNeededForReward = $this->getSetting('number_of_order_to_get_reward', 1);
-            $usersNeededForReward = $this->getSetting('number_of_referral_user_to_reward', 5);
-            
-            // Get all referrals by this referrer
-            $allReferralsByReferrer = ReferralReward::where('referrer_id', $qualifiedReferral->referrer_id)
-                ->where('referrer_type', $qualifiedReferral->referrer_type)
-                ->get();
-            
-            // Count how many referred users have completed the required orders
-            $qualifiedReferralsCount = $allReferralsByReferrer->filter(function ($referral) use ($ordersNeededForReward) {
-                return $referral->orders_completed >= $ordersNeededForReward;
-            })->count();
-            
-            \Log::info("Referrer {$qualifiedReferral->referrer_type} ID {$qualifiedReferral->referrer_id}: {$qualifiedReferralsCount}/{$usersNeededForReward} qualified referrals");
-            
-            // Check if referrer has enough qualified referrals
-            if ($qualifiedReferralsCount >= $usersNeededForReward) {
-                // Pay rewards for all qualified referrals that haven't been paid yet
-                $unpaidQualifiedReferrals = $allReferralsByReferrer->filter(function ($referral) use ($ordersNeededForReward) {
-                    return $referral->orders_completed >= $ordersNeededForReward && !$referral->reward_paid;
-                });
-                
-                foreach ($unpaidQualifiedReferrals as $referral) {
-                    $this->payReferralReward($referral);
-                }
-            }
-            
-        } catch (\Exception $e) {
-            \Log::error("Error checking referrer conditions: " . $e->getMessage());
-        }
+        // Get all referrals by this referrer
+        $allReferralsByReferrer = ReferralReward::where('referrer_id', $referrerId)
+            ->where('referrer_type', $referrerType)
+            ->get();
+        
+        // Count how many referred users have completed the required orders
+        $qualifiedReferralsCount = $allReferralsByReferrer->filter(function ($referral) use ($ordersNeededForReward) {
+            return $referral->orders_completed >= $ordersNeededForReward;
+        })->count();
+        
+        return $qualifiedReferralsCount >= $usersNeededForReward;
     }
     
     /**
-     * Pay the referral reward
+     * Pay the referral reward for a completed order
      */
-    private function payReferralReward(ReferralReward $referralReward)
+    private function payReferralRewardForOrder(ReferralReward $referralReward)
     {
         DB::beginTransaction();
         
         try {
             // Determine reward amount based on WHO is the referrer (user or driver)
             if ($referralReward->referrer_type === 'user') {
-                // User referring another user
                 $rewardAmount = $this->getSetting('user_referral_user_reward', 0);
             } else {
-                // Driver referring a user
                 $rewardAmount = $this->getSetting('driver_referral_user_reward', 0);
             }
             
             if ($rewardAmount <= 0) {
-                \Log::info("Referral reward amount is 0, skipping payment for referral {$referralReward->id}");
+                \Log::info("Referral reward amount is 0, skipping payment");
+                DB::rollBack();
                 return false;
             }
             
-            // Get the referrer (can be User or Driver)
+            // Get the referrer
             if ($referralReward->referrer_type === 'user') {
                 $referrer = User::find($referralReward->referrer_id);
                 
                 if ($referrer) {
-                    // Add balance to user
                     $referrer->addBalance(
                         $rewardAmount,
-                        "Referral reward for referring user ID: {$referralReward->referred_id}",
+                        "Referral reward for order #{$referralReward->orders_completed} by user ID: {$referralReward->referred_id}",
                         null,
                         $referrer->id
                     );
@@ -228,24 +214,28 @@ class ReferralService
                 $referrer = Driver::find($referralReward->referrer_id);
                 
                 if ($referrer) {
-                    // Add balance to driver
                     $referrer->addBalance(
                         $rewardAmount,
-                        "Referral reward for referring user ID: {$referralReward->referred_id}",
+                        "Referral reward for order #{$referralReward->orders_completed} by user ID: {$referralReward->referred_id}",
                         null,
                         $referrer->id
                     );
                 }
             }
             
-            // Mark as paid
-            $referralReward->update([
-                'reward_paid' => true,
-                'reward_amount' => $rewardAmount,
-                'reward_paid_at' => now(),
-            ]);
+            // Update total reward amount and mark as paid (if first time)
+            if (!$referralReward->reward_paid) {
+                $referralReward->update([
+                    'reward_paid' => true,
+                    'reward_amount' => $rewardAmount,
+                    'reward_paid_at' => now(),
+                ]);
+            } else {
+                // Increment the reward amount for subsequent orders
+                $referralReward->increment('reward_amount', $rewardAmount);
+            }
             
-            \Log::info("Referral reward paid: {$rewardAmount} to {$referralReward->referrer_type} ID: {$referralReward->referrer_id}");
+            \Log::info("Referral reward paid: {$rewardAmount} to {$referralReward->referrer_type} ID: {$referralReward->referrer_id} for order #{$referralReward->orders_completed}");
             
             DB::commit();
             return true;
@@ -258,12 +248,28 @@ class ReferralService
     }
     
     /**
+     * Generate a unique referral code
+     */
+    public function generateReferralCode($prefix = '')
+    {
+        do {
+            $code = $prefix . strtoupper(Str::random(8));
+            
+            $existsInUsers = User::where('referral_code', $code)->exists();
+            $existsInDrivers = Driver::where('referral_code', $code)->exists();
+            
+        } while ($existsInUsers || $existsInDrivers);
+        
+        return $code;
+    }
+    
+    /**
      * Get referral statistics for a user
      */
     public function getUserReferralStats(User $user)
     {
         $ordersNeededForReward = $this->getSetting('number_of_order_to_get_reward', 1);
-        $usersNeededForReward = $this->getSetting('number_of_referral_user_to_reward', 5);
+        $usersNeededForReward = $this->getSetting('number_of_referral_user_to_reward', 1);
         
         // Total referred users
         $totalReferredUsers = ReferralReward::where('referrer_id', $user->id)
@@ -282,19 +288,12 @@ class ReferralService
             ->where('reward_paid', true)
             ->sum('reward_amount');
         
-        $pendingRewards = ReferralReward::where('referrer_id', $user->id)
-            ->where('referrer_type', 'user')
-            ->where('reward_paid', false)
-            ->where('orders_completed', '>=', $ordersNeededForReward)
-            ->count();
-        
         return [
             'total_referrals' => $totalReferredUsers,
             'qualified_referrals' => $qualifiedReferrals,
             'qualified_referrals_needed' => $usersNeededForReward,
             'orders_per_user_needed' => $ordersNeededForReward,
             'total_earnings' => (float) $totalEarnings,
-            'pending_rewards' => $pendingRewards,
             'can_receive_rewards' => $qualifiedReferrals >= $usersNeededForReward,
         ];
     }
@@ -305,7 +304,7 @@ class ReferralService
     public function getDriverReferralStats(Driver $driver)
     {
         $ordersNeededForReward = $this->getSetting('number_of_order_to_get_reward', 1);
-        $usersNeededForReward = $this->getSetting('number_of_referral_user_to_reward', 5);
+        $usersNeededForReward = $this->getSetting('number_of_referral_user_to_reward', 1);
         
         // Total referred users
         $totalReferredUsers = ReferralReward::where('referrer_id', $driver->id)
@@ -324,19 +323,12 @@ class ReferralService
             ->where('reward_paid', true)
             ->sum('reward_amount');
         
-        $pendingRewards = ReferralReward::where('referrer_id', $driver->id)
-            ->where('referrer_type', 'driver')
-            ->where('reward_paid', false)
-            ->where('orders_completed', '>=', $ordersNeededForReward)
-            ->count();
-        
         return [
             'total_referrals' => $totalReferredUsers,
             'qualified_referrals' => $qualifiedReferrals,
             'qualified_referrals_needed' => $usersNeededForReward,
             'orders_per_user_needed' => $ordersNeededForReward,
             'total_earnings' => (float) $totalEarnings,
-            'pending_rewards' => $pendingRewards,
             'can_receive_rewards' => $qualifiedReferrals >= $usersNeededForReward,
         ];
     }
