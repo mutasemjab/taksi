@@ -8,6 +8,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use App\Enums\OrderStatus; 
+
 
 class DriverStatisticsController extends Controller
 {
@@ -18,63 +20,38 @@ class DriverStatisticsController extends Controller
      * @return \Illuminate\Http\JsonResponse
      */
     public function getMonthlyStatistics(Request $request)
-{
-    try {
-        $driver = Auth::guard('driver-api')->user();
-        
-        $request->validate([
-            'month' => 'required|integer|min:1|max:12',
-            'year' => 'nullable|integer|min:2020',
-        ]);
-        
-        $month = $request->month;
-        $year = $request->year ?? date('Y');
-        
-        $startDate = Carbon::create($year, $month, 1)->startOfDay();
-        $endDate = Carbon::create($year, $month, 1)->endOfMonth()->endOfDay();
-        
-        // 🔍 Debug: اطبع التواريخ
-        \Log::info('Date Range', [
-            'start' => $startDate->toDateTimeString(),
-            'end' => $endDate->toDateTimeString(),
-            'driver_id' => $driver->id
-        ]);
-        
-        // Get all orders
-        $orders = Order::where('driver_id', $driver->id)
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->get();
-        
-        // 🔍 Debug: اطبع عدد الطلبات
-        \Log::info('Orders Found', [
-            'total' => $orders->count(),
-            'completed' => $orders->where('status', 'completed')->count(),
-            'cancelled' => $orders->where('status', 'driver_cancel_order')->count(),
-        ]);
-        
-        // إذا مافيش طلبات، ارجع الطلبات بدون فلتر تاريخ للتأكد
-        if ($orders->isEmpty()) {
-            $allOrders = Order::where('driver_id', $driver->id)->get();
-            \Log::info('All Orders without date filter', [
-                'count' => $allOrders->count(),
-                'sample_dates' => $allOrders->take(3)->pluck('created_at')
+    {
+        try {
+            $driver = Auth::guard('driver-api')->user();
+            
+            // Validate input
+            $request->validate([
+                'month' => 'required|integer|min:1|max:12',
+                'year' => 'nullable|integer|min:2020',
             ]);
-        }
-        
-        $completedOrders = $orders->where('status', 'completed');
-        $completedCount = $completedOrders->count();
-        
-        $cancelledByDriverOrders = $orders->where('status', 'driver_cancel_order');
-        $cancelledCount = $cancelledByDriverOrders->count();
-        
-        $totalEarnings = $completedOrders->sum('net_price_for_driver');
-        
-        // 🔍 Debug: اطبع الأرباح
-        \Log::info('Earnings Calculation', [
-            'total_earnings' => $totalEarnings,
-            'completed_count' => $completedCount,
-            'sample_earnings' => $completedOrders->take(3)->pluck('net_price_for_driver')
-        ]);
+            
+            $month = $request->month;
+            $year = $request->year ?? date('Y');
+            
+            // Get start and end dates for the month
+            $startDate = Carbon::create($year, $month, 1)->startOfDay();
+            $endDate = Carbon::create($year, $month, 1)->endOfMonth()->endOfDay();
+            
+            // Get all orders for this driver in this month
+            $orders = Order::where('driver_id', $driver->id)
+                ->whereBetween('created_at', [$startDate, $endDate])
+                ->get();
+            
+            // 🔥 استخدم الـ Enum value بدل النص المباشر
+            $completedOrders = $orders->where('status', OrderStatus::Delivered->value);
+            $completedCount = $completedOrders->count();
+            
+            // Calculate cancelled orders by driver
+            $cancelledByDriverOrders = $orders->where('status', OrderStatus::DriverCancelOrder->value);
+            $cancelledCount = $cancelledByDriverOrders->count();
+            
+            // Calculate total earnings (net price for driver from completed orders)
+            $totalEarnings = $completedOrders->sum('net_price_for_driver');
             
             // Get day-by-day breakdown for chart
             $dailyData = [];
@@ -86,15 +63,16 @@ class DriverStatisticsController extends Controller
                 
                 $dayOrders = $orders->whereBetween('created_at', [$dayStart, $dayEnd]);
                 
-                $dayCompleted = $dayOrders->where('status', 'completed');
-                $dayCancelled = $dayOrders->where('status', 'driver_cancel_order');
+                // 🔥 استخدم الـ Enum هنا كمان
+                $dayCompleted = $dayOrders->where('status', OrderStatus::Delivered->value);
+                $dayCancelled = $dayOrders->where('status', OrderStatus::DriverCancelOrder->value);
                 $dayEarnings = $dayCompleted->sum('net_price_for_driver');
                 
                 $dailyData[] = [
                     'date' => $currentDate->format('Y-m-d'),
                     'day' => $currentDate->format('d'),
-                    'day_name' => $currentDate->locale('ar')->translatedFormat('l'), // اسم اليوم بالعربي
-                    'day_name_en' => $currentDate->format('l'), // اسم اليوم بالانجليزي
+                    'day_name' => $currentDate->locale('ar')->translatedFormat('l'),
+                    'day_name_en' => $currentDate->format('l'),
                     'completed_orders' => $dayCompleted->count(),
                     'cancelled_orders' => $dayCancelled->count(),
                     'earnings' => (float) $dayEarnings,
@@ -135,8 +113,8 @@ class DriverStatisticsController extends Controller
                 'data' => [
                     'month' => $month,
                     'year' => $year,
-                    'month_name' => Carbon::create($year, $month, 1)->locale('ar')->translatedFormat('F'), // اسم الشهر بالعربي
-                    'month_name_en' => Carbon::create($year, $month, 1)->format('F'), // اسم الشهر بالانجليزي
+                    'month_name' => Carbon::create($year, $month, 1)->locale('ar')->translatedFormat('F'),
+                    'month_name_en' => Carbon::create($year, $month, 1)->format('F'),
                     
                     // Summary statistics
                     'summary' => [
