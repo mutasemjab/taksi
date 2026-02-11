@@ -19,28 +19,54 @@ class DriverStatisticsController extends Controller
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getMonthlyStatistics(Request $request)
-    {
-        try {
-            $driver = Auth::guard('driver-api')->user();
-            
-            // Validate input
-            $request->validate([
-                'month' => 'required|integer|min:1|max:12',
-                'year' => 'nullable|integer|min:2020',
+   public function getMonthlyStatistics(Request $request)
+{
+    try {
+        $driver = Auth::guard('driver-api')->user();
+        
+        $request->validate([
+            'month' => 'required|integer|min:1|max:12',
+            'year' => 'nullable|integer|min:2020',
+        ]);
+        
+        $month = $request->month;
+        $year = $request->year ?? date('Y');
+        
+        $startDate = Carbon::create($year, $month, 1)->startOfDay();
+        $endDate = Carbon::create($year, $month, 1)->endOfMonth()->endOfDay();
+        
+        $orders = Order::where('driver_id', $driver->id)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->get();
+        
+        // 🔍 Debug: اطبع كل الـ statuses اللي موجودة
+        \Log::info('All Status Values', [
+            'statuses' => $orders->pluck('status')->toArray(),
+            'unique_statuses' => $orders->pluck('status')->unique()->values()->toArray(),
+            'enum_completed_value' => OrderStatus::Delivered->value,
+            'enum_driver_cancel_value' => OrderStatus::DriverCancelOrder->value,
+        ]);
+        
+        // 🔍 Debug: جرب تطبع أول طلب
+        if ($orders->isNotEmpty()) {
+            $firstOrder = $orders->first();
+            \Log::info('First Order Details', [
+                'id' => $firstOrder->id,
+                'status' => $firstOrder->status,
+                'status_type' => gettype($firstOrder->status),
+                'status_is_enum' => $firstOrder->status instanceof OrderStatus,
+                'raw_status' => $firstOrder->getRawOriginal('status'),
             ]);
-            
-            $month = $request->month;
-            $year = $request->year ?? date('Y');
-            
-            // Get start and end dates for the month
-            $startDate = Carbon::create($year, $month, 1)->startOfDay();
-            $endDate = Carbon::create($year, $month, 1)->endOfMonth()->endOfDay();
-            
-            // Get all orders for this driver in this month
-            $orders = Order::where('driver_id', $driver->id)
-                ->whereBetween('created_at', [$startDate, $endDate])
-                ->get();
+        }
+        
+        // جرب الطريقتين
+        $completedOrders1 = $orders->where('status', OrderStatus::Delivered->value);
+        $completedOrders2 = $orders->where('status', OrderStatus::Delivered);
+        
+        \Log::info('Comparison', [
+            'with_value' => $completedOrders1->count(),
+            'without_value' => $completedOrders2->count(),
+        ]);
             
             // 🔥 استخدم الـ Enum value بدل النص المباشر
             $completedOrders = $orders->where('status', OrderStatus::Delivered->value);
