@@ -18,38 +18,63 @@ class DriverStatisticsController extends Controller
      * @return \Illuminate\Http\JsonResponse
      */
     public function getMonthlyStatistics(Request $request)
-    {
-        try {
-            $driver = Auth::guard('driver-api')->user();
-            
-            // Validate input
-            $request->validate([
-                'month' => 'required|integer|min:1|max:12',
-                'year' => 'nullable|integer|min:2020|max:' . (date('Y') + 1),
+{
+    try {
+        $driver = Auth::guard('driver-api')->user();
+        
+        $request->validate([
+            'month' => 'required|integer|min:1|max:12',
+            'year' => 'nullable|integer|min:2020',
+        ]);
+        
+        $month = $request->month;
+        $year = $request->year ?? date('Y');
+        
+        $startDate = Carbon::create($year, $month, 1)->startOfDay();
+        $endDate = Carbon::create($year, $month, 1)->endOfMonth()->endOfDay();
+        
+        // 🔍 Debug: اطبع التواريخ
+        \Log::info('Date Range', [
+            'start' => $startDate->toDateTimeString(),
+            'end' => $endDate->toDateTimeString(),
+            'driver_id' => $driver->id
+        ]);
+        
+        // Get all orders
+        $orders = Order::where('driver_id', $driver->id)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->get();
+        
+        // 🔍 Debug: اطبع عدد الطلبات
+        \Log::info('Orders Found', [
+            'total' => $orders->count(),
+            'completed' => $orders->where('status', 'completed')->count(),
+            'cancelled' => $orders->where('status', 'driver_cancel_order')->count(),
+        ]);
+        
+        // إذا مافيش طلبات، ارجع الطلبات بدون فلتر تاريخ للتأكد
+        if ($orders->isEmpty()) {
+            $allOrders = Order::where('driver_id', $driver->id)->get();
+            \Log::info('All Orders without date filter', [
+                'count' => $allOrders->count(),
+                'sample_dates' => $allOrders->take(3)->pluck('created_at')
             ]);
-            
-            $month = $request->month;
-            $year = $request->year ?? date('Y');
-            
-            // Get start and end dates for the month
-            $startDate = Carbon::create($year, $month, 1)->startOfDay();
-            $endDate = Carbon::create($year, $month, 1)->endOfMonth()->endOfDay();
-            
-            // Get all orders for this driver in this month
-            $orders = Order::where('driver_id', $driver->id)
-                ->whereBetween('created_at', [$startDate, $endDate])
-                ->get();
-            
-            // Calculate completed orders
-            $completedOrders = $orders->where('status', 'completed');
-            $completedCount = $completedOrders->count();
-            
-            // Calculate cancelled orders by driver
-            $cancelledByDriverOrders = $orders->where('status', 'driver_cancel_order');
-            $cancelledCount = $cancelledByDriverOrders->count();
-            
-            // Calculate total earnings (net price for driver from completed orders)
-            $totalEarnings = $completedOrders->sum('net_price_for_driver');
+        }
+        
+        $completedOrders = $orders->where('status', 'completed');
+        $completedCount = $completedOrders->count();
+        
+        $cancelledByDriverOrders = $orders->where('status', 'driver_cancel_order');
+        $cancelledCount = $cancelledByDriverOrders->count();
+        
+        $totalEarnings = $completedOrders->sum('net_price_for_driver');
+        
+        // 🔍 Debug: اطبع الأرباح
+        \Log::info('Earnings Calculation', [
+            'total_earnings' => $totalEarnings,
+            'completed_count' => $completedCount,
+            'sample_earnings' => $completedOrders->take(3)->pluck('net_price_for_driver')
+        ]);
             
             // Get day-by-day breakdown for chart
             $dailyData = [];
