@@ -30,6 +30,8 @@ class AppServiceProvider extends ServiceProvider
         Relation::enforceMorphMap([
             'user' => 'App\Models\User',
             'driver' => 'App\Models\Driver',
+            'order' => 'App\Models\Order',
+
         ]);
     
     }
