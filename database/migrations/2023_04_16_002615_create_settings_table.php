@@ -23,6 +23,8 @@ return new class extends Migration
             ['key' => "minimum_money_in_wallet_driver_to_get_order", 'value' => 1],
             ['key' => "times_that_driver_cancel_orders_in_one_day", 'value' => 2], // fixed
             ['key' => "fee_when_driver_cancel_order_more_times", 'value' => 0.5], // fixed
+            ['key' => "times_that_user_cancel_orders_in_one_day", 'value' => 2],
+            ['key' => "fee_when_user_cancel_order_more_times", 'value' => 0.5],
             ['key' => "new_user_register_add_balance", 'value' => 0], // fixed
             ['key' => "new_driver_register_add_balance", 'value' => 0], // fixed
             ['key' => "find_drivers_in_radius", 'value' => 5], // km

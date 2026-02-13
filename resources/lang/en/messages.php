@@ -1346,10 +1346,10 @@ return [
     'Can driver withdrawal from his wallet (1=>Yes, 2=>No)',
 
     'times_that_driver_cancel_orders_in_one_day' =>
-    'Number of order cancellations allowed per day',
+    'Number of order cancellations allowed per day for driver',
 
     'fee_when_driver_cancel_order_more_times' =>
-    'Penalty fee when driver exceeds cancellation limit',
+    'Penalty fee when driver exceeds cancellation limit for driver',
 
     'new_user_register_add_balance' =>
     'Bonus balance for new user registration',
@@ -1961,9 +1961,9 @@ return [
     'Reward_Amount' => 'Reward Amount',
     'Orders_Required' => 'Orders Required',
     'enable_app_credit_distribution_system' => 'Enable app credit distribution system',
-    '' => '',
-    '' => '',
-    '' => '',
+    'Adding_new_payment_will_create_new_record' => 'Adding new payment will create new record',
+    'times_that_user_cancel_orders_in_one_day' => 'Number of order cancellations allowed per day for user',
+    'fee_when_user_cancel_order_more_times' => 'Penalty fee when driver exceeds cancellation limit for user',
     '' => '',
     '' => '',
     '' => '',
