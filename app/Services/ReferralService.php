@@ -223,15 +223,16 @@ class ReferralService
                 }
             }
             
-            // Update total reward amount and mark as paid (if first time)
+            // ✅ التعديل: دائماً قم بزيادة المبلغ الإجمالي
             if (!$referralReward->reward_paid) {
+                // أول مرة - احفظ التاريخ وعلّم أنه تم الدفع
                 $referralReward->update([
                     'reward_paid' => true,
                     'reward_amount' => $rewardAmount,
                     'reward_paid_at' => now(),
                 ]);
             } else {
-                // Increment the reward amount for subsequent orders
+                // ✅ في المرات التالية - استمر في إضافة المكافآت
                 $referralReward->increment('reward_amount', $rewardAmount);
             }
             
