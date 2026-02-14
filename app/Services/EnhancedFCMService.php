@@ -292,7 +292,6 @@ class EnhancedFCMService extends AdminFCMController
                         "payload" => [
                             "aps" => [
                                 "sound" => "notification_sound.wav",
-                                "category" => "taxiu_ride_request",
                                 "badge" => 1
                             ]
                         ]
